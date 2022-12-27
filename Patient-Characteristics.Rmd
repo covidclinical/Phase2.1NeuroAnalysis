@@ -10,7 +10,7 @@ output:
     theme: spacelab
 ---
 
-This notebook describes the **87,869** hospitalized COVID-19 positive patients that were studied as part of the [Consortium for Clinical Characterization of COVID-19 by EHR](https://covidclinical.net/) Neurology group.
+This notebook describes the **106,229** hospitalized COVID-19 positive patients that were studied as part of the [Consortium for Clinical Characterization of COVID-19 by EHR](https://covidclinical.net/) Neurology group.
 
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -571,7 +571,7 @@ Evaluate CNS and PNS neurological diagnoses in our patient cohort
 ```{r fig.width=12}
 # import list of ICD-9/ICD-10 codes
 neuro_icds_10 <-
-  readxl::read_excel("C:/Users/User/Box Sync/Projects/nu4ce/neuro/Phase2.1NeuroRSummaries/analysis_v2/public-data/2020-02-22_neuro-icd10_CNSvPNS.xlsx", sheet = 2) %>% 
+  readxl::read_excel("public-data/2020-02-22_neuro-icd10_CNSvPNS.xlsx", sheet = 2) %>% 
   rename(
     "icd" = `ICD-10`,
     "pns_cns" = `Nervous system Involvement (1=central, 2=peripheral, 3=irrelevant)`,
@@ -701,7 +701,6 @@ compute_stratified_neuro_counts <- function(tableone, sorted_sites, is_pediatric
   
     if(is_pediatric==FALSE) {
       population = "adults"
-      sorted_sites = sorted_sites[!sorted_sites %in% c("BCH_results", "GOSH_results")]
       } else {
       population = "pediatrics"
       }
@@ -719,7 +718,7 @@ compute_stratified_neuro_counts <- function(tableone, sorted_sites, is_pediatric
     tmp_diag$site <- tmp[["site"]]
     try(
     diag_table_list[[i]] <- tmp_diag %>%
-      select(variable, starts_with("n_var")) %>% 
+      select(site, variable, starts_with("n_var")) %>% 
       pivot_longer(cols = starts_with("n_var"), names_to = "code", values_to = "freq") %>% 
       ungroup()
     )
@@ -825,76 +824,21 @@ compute_stratified_neuro_counts_age <- function(stratified_neuro_counts, tableon
 
 ```{r}
 stratified_neuro_counts_age_adult <- compute_stratified_neuro_counts_age(stratified_neuro_counts = stratified_neuro_counts_adult,
-                                                                 tableone = tableone_adult)
+                                                                         tableone = tableone_adult)
 
 stratified_neuro_counts_age_pediatric <- compute_stratified_neuro_counts_age(stratified_neuro_counts = stratified_neuro_counts_pediatric,
                                                                  tableone = tableone_pediatric)
 ```
 
-
-
-```{r fig.height=9, fig.width=15}
-group.colors <- c(NNC = "#621561", PNS = "#d90429", CNS ="#d6b9b4")
-
-pediatric_plot <- ggplot(stratified_neuro_counts_age_pediatric, 
-       aes(x = total_n_var, y = reorder(description, total_n_var), fill = pns_cns)) +
-  geom_bar(stat = "identity") +
- geom_text(
-    aes(x = total_n_var, y = description, label = perc), 
-    hjust = -0.1, size = 3,
-    position = position_dodge(width = 1),
-    inherit.aes = TRUE
-  ) + 
-  facet_grid(pns_cns ~ variable, switch="y", scale = "free_y") +   # Put the y facet strips on the left
-  scale_y_discrete("", position="right") +   # Put the y-axis labels on the right
-  scale_fill_manual(values = group.colors) + 
-  ylab("") + 
-  xlab("Number of Patients") + 
-  xlim(0, 35) + 
-  ggtitle("a. Pediatric Patients") +
-  theme(plot.title = element_text(size = 12, face = "bold", hjust = 0))
-
-ggsave("figures/Fig3A_diagnoses_by_age_pediatrics.png", width = 12, height = 7, dpi = 300)
-```
-
-```{r fig.height=9, fig.width=15}
-adult_plot <- ggplot(stratified_neuro_counts_age_adult, 
- aes(x = total_n_var, y = reorder(description, total_n_var), fill = pns_cns)) +
-  geom_bar(stat = "identity") +
- geom_text(
-    aes(x = total_n_var, y = description, label = perc), 
-    hjust = -0.1, size = 3,
-    position = position_dodge(width = 1),
-    inherit.aes = TRUE
-  ) + 
-  facet_grid(pns_cns ~ variable, switch="y", scale = "free_y") +   # Put the y facet strips on the left
-  scale_y_discrete("", position="right", labels = function(x) str_wrap(x, width = 150)) +   # Put the y-axis labels on the right 
-  scale_fill_manual(values = group.colors) + 
-  ylab("") + 
-  xlab("Number of Patients") + 
-  xlim(0, 3500) + 
-  ggtitle("b. Adult Patients")  +
-  theme(plot.title = element_text(size = 12, face = "bold", hjust = 0))
-
-ggsave("figures/Fig3B_diagnoses_by_age_adult.png", width = 14, height = 12, dpi = 300)
-```
-
-**Diagnoses by Age**
-
-```{r fig.height=20, fig.width=15}
-grid.arrange(pediatric_plot, adult_plot, ncol=1)
-
-ggsave("figures/Figure3.Diagnoses_by_age.pdf", grid.arrange(pediatric_plot, adult_plot, ncol=1), width = 18, height = 15, dpi = 300)
-```
-
 **Diagnoses by Adult & < 18**
 
 ```{r fig.height=20, fig.width=15}
-n_0_2 <- get_table_n(tableone, var = "0-2")
-n_6_11 = get_table_n(tableone, var = "6-11")
-n_12_17 = get_table_n(tableone, var = "12-17")
+n_0_2 <- get_table_n(tableone_combine, var = "0-2")
+#n_3_5 <- get_table_n(tableone_combine, var = "3-5")
+n_6_11 <- get_table_n(tableone_combine, var = "6-11")
+n_12_17 <- get_table_n(tableone_combine, var = "12-17")
 
-total_ped_age_count = n_0_2 + n_6_11 + n_12_17
+total_ped_age_count = n_0_2 +  n_6_11 + n_12_17
 
 stratified_neuro_counts_age_pediatric_reformat = stratified_neuro_counts_age_pediatric %>%
   select(variable, pns_cns, description, n_var, total_n_var) %>%
@@ -902,6 +846,7 @@ stratified_neuro_counts_age_pediatric_reformat = stratified_neuro_counts_age_ped
   group_by(pns_cns, description) %>%
   mutate(total_n_var = sum(total_n_var, na.rm = TRUE)) %>%
   ungroup() %>%
+  # n_var is the total per `age_group` stratification
   select(-n_var) %>%
   distinct() %>%
   mutate(perc = round(total_n_var/total_ped_age_count*100,1),
@@ -935,16 +880,15 @@ adult_ped_combined_plot <- ggplot(stratified_neuro_counts_age_combined,
   facet_grid(pns_cns ~ variable, scales = "free") + 
   scale_y_discrete("", position="left", labels = function(x) str_wrap(x, width = 100)) +   
   scale_fill_manual(values = group.colors) +
-  #ylab("") +
   xlab("Number of Patients") +
   theme(legend.position = "none",
-        strip.text.y = element_text(size = 35),
-        strip.text.x = element_text(size = 30),
-        axis.text.y.left = element_text(size = 25),
-        axis.text.x = element_text(size = 15),
-        axis.title.x = element_text(size = 20))
+        strip.text.y = element_text(size = 40),
+        strip.text.x = element_text(size = 35),
+        axis.text.y.left = element_text(size = 25, face = "bold"),
+        axis.text.x = element_text(size = 25),
+        axis.title.x = element_text(size = 35))
 
-ggsave("figures/Fig3_diagnoses_by_age_adult_ped_18group.png", adult_ped_combined_plot, width = 40, height = 18, dpi = 300)
+ggsave("figures/Fig3_diagnoses_by_age_adult_ped_18group.png", adult_ped_combined_plot, width = 40, height = 19, dpi = 300)
 ```
 
 ## Evaluate Diagnoses by Outcome
@@ -962,7 +906,6 @@ n_severe_adult = get_table_n(df = tableone_adult, var = "Severe")
 
 n_death_pediatric = get_table_n(df = tableone_pediatric, var = "Deceased")
 n_severe_pediatric = get_table_n(df = tableone_pediatric, var = "Severe")
-
 
 stratified_neuro_counts_outcomes <- stratified_neuro_counts_combine %>% 
   filter(variable %in% c("Severe", "Deceased"),
@@ -984,7 +927,10 @@ stratified_neuro_counts_outcomes <- stratified_neuro_counts_combine %>%
 
 ```{r}
 adult_outcomes = ggplot(stratified_neuro_counts_outcomes %>% 
-         filter(population == "adult"),
+         filter(population == "adult") %>% 
+           mutate(variable = as.factor(variable) %>% 
+                                          fct_recode(
+                                            Mortality = "Deceased")),
        aes(x = total_n_var, y = reorder(description, total_n_var), fill = pns_cns)) +
   geom_bar(stat = "identity") +
  geom_text(
@@ -1001,16 +947,19 @@ adult_outcomes = ggplot(stratified_neuro_counts_outcomes %>%
     theme(legend.position = "none",
         strip.text.y = element_text(size = 35),
         strip.text.x = element_text(size = 30),
-        axis.text.y.left = element_text(size = 20),
+        axis.text.y.left = element_text(size = 20, face = "bold"),
         axis.text.x = element_text(size = 15),
-        axis.title.x = element_text(size = 20))
+        axis.title.x = element_text(size = 35))
 
 ggsave("figures/SuppFig1_diagnoses_by_outcomes_adult.png", adult_outcomes, width = 25, height = 15, dpi = 300)
 ```
 
 ```{r}
 pediatric_outcomes = ggplot(stratified_neuro_counts_outcomes %>% 
-         filter(population == "pediatric"),
+         filter(population == "pediatric") %>% 
+           mutate(variable = as.factor(variable) %>% 
+                                          fct_recode(
+                                            Mortality = "Deceased")),
        aes(x = total_n_var, y = reorder(description, total_n_var), fill = pns_cns)) +
   geom_bar(stat = "identity") +
  geom_text(
@@ -1023,13 +972,13 @@ pediatric_outcomes = ggplot(stratified_neuro_counts_outcomes %>%
   facet_grid(pns_cns ~ variable, scales = "free") + 
   scale_y_discrete("", position="left", labels = function(x) str_wrap(x, width = 100)) +   
   scale_fill_manual(values = group.colors) +
-  xlab("Number of Patients") + 
+  xlab("") + 
   theme(legend.position = "none",
         strip.text.y = element_text(size = 35),
         strip.text.x = element_text(size = 30),
-        axis.text.y.left = element_text(size = 20),
+        axis.text.y.left = element_text(size = 20, face = "bold"),
         axis.text.x = element_text(size = 15),
-        axis.title.x = element_text(size = 20))
+        axis.title.x = element_text(size = 35))
 
 ggsave("figures/SuppFig1_diagnoses_by_outcomes_pediatric.png", pediatric_outcomes, width = 25, height = 9, dpi = 300)
 ```
@@ -1142,8 +1091,8 @@ calculate_rr <- function(is_pediatric = FALSE) {
              risk_non_cns = c/(c+d),
              rr_CNS = risk_cns/risk_non_cns,
              # for confidence intervals
-             ci_1 = (b/a)/(a+b),
-             ci_2 = (d/c)/(c+d),
+             ci_1 = (b/a)/(a+b), # (n1-x1)/n1 
+             ci_2 = (d/c)/(c+d), # (n2-x2)/n2
              ci_root = sqrt(ci_1 + ci_2),
              ci_lower = log(rr_CNS) - (1.96*ci_root),
              ci_upper = log(rr_CNS) + (1.96*ci_root),
@@ -1237,7 +1186,8 @@ calculate_rr <- function(is_pediatric = FALSE) {
                          limits = c(0,4)) +
     ylab("") +
     xlab("Relative Risk") +
-    ggtitle("a. CNS Patients")
+    ggtitle("A. CNS Patients") + 
+    theme(axis.text.y = element_text(face = "bold"))
   
   # arrange by top PNS results
   pns_top_results <- rr_results_tidy %>%
@@ -1258,7 +1208,8 @@ calculate_rr <- function(is_pediatric = FALSE) {
                          limits = c(0,1.5)) +
     ylab("") +
     xlab("Relative Risk") +
-    ggtitle("b. PNS Patients")
+    ggtitle("B. PNS Patients") + 
+    theme(axis.text.y = element_text(face = "bold"))
   
   pns_rr_plot <- set_panel_size(pns_rr_plot,
                             width  = unit(7, "cm"),
@@ -1270,14 +1221,14 @@ calculate_rr <- function(is_pediatric = FALSE) {
   
   grid.arrange(cns_rr_plot, pns_rr_plot, ncol=2)
   
-  ggsave(paste0("figures/Figure4.relative_risk_", pop, ".png"), grid.arrange(cns_rr_plot, pns_rr_plot, ncol=2), width = 12, height = 8, dpi = 300)
+  ggsave(paste0("figures/Figure4.relative_risk_", pop, ".png"), grid.arrange(cns_rr_plot, pns_rr_plot, ncol=2), width = 15, height = 8, dpi = 300)
   
   }
 ```
 
 ```{r}
 rr_adult <- calculate_rr(is_pediatric = FALSE)
-rr_pediatric <- calculate_rr(is_pediatric = TRUE)
+#rr_pediatric <- calculate_rr(is_pediatric = TRUE)
 ```
 
 
@@ -1326,16 +1277,21 @@ pca_adult <- compare_deviance(sorted_sites = adult_sites, is_pediatric = FALSE)
 
 pca_data <- bind_rows(pca_adult)
 
+
+theme_set(theme_classic())
+
 pca_plot <- ggplot(pca_data, 
        aes(x = fct_reorder(site, -dev_expl), y = dev_expl, group = 1)) +
-  geom_point() +
+  geom_point(size = 2.5) +
   geom_line() +
   xlab("") + 
-  labs(y = "Proportion of Deviance explained") +  
+  ylab("Proportion of Deviance explained") +  
   ylim(0,1) + 
-  theme(axis.text.x=element_text(angle=90, hjust=1)); pca_plot
+  theme(axis.text.x=element_text(angle=90, hjust=1, face = "bold", size = 12),
+        axis.text.y=element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold", size = 15)); pca_plot
 
-ggsave("figures/SuppFig_pca_deviance.png", pca_plot, height = 4, width = 6)
+ggsave("figures/SuppFig_pca_deviance.png", pca_plot, height = 6, width = 6)
 ```
 
 
