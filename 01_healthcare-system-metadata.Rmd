@@ -1,0 +1,137 @@
+---
+title: "Healthcare System Meta-data"
+author: "Meg Hutch"
+date: "2022-11-01"
+output: html_document
+---
+
+This notebook organizes each participating healthcare system's data to abstract the date up to which patient's were admitted. Additionally, we generate a table of each site's adult, pediatric, and total patient counts.
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(DT)
+library(kableExtra)
+```
+
+## **Import Data from each Healthcare System**
+
+```{r message=FALSE, warning=FALSE}
+# read in files from results folder 
+# this folder contains all of the local healthcare system level analyses
+rdas <- list.files(
+  path = "results",
+  pattern = ".rda",
+  full.names = TRUE
+)
+for (rda in rdas) {
+  load(rda)
+}
+
+rm(rdas, rda)
+
+# create a list of participating healthcare systems from our study tracking spreadsheet
+site_google_url <- "https://docs.google.com/spreadsheets/d/1epcYNd_0jCUMktOHf8mz5v651zy1JALD6PgzobrGWDY/edit?usp=sharing"
+
+# load site parameters
+site_params <- googlesheets4::read_sheet(site_google_url, sheet = 1)
+site_avails <- googlesheets4::read_sheet(site_google_url, sheet = 2)
+
+# filter the list of sites who ran the analysis
+sorted_sites <- site_avails %>%
+  filter(!is.na(date_v4_received)) %>%
+  pull(siteid) %>%
+  paste("results", sep = "_")
+
+# list sites without race
+sites_wo_race <- site_params %>%
+  filter(!include_race) %>%
+  pull(siteid)
+
+# combine all rda files with 'results' in name
+results <- mget(ls(pattern = "results"))
+```
+
+### **Latest Admission Date**
+
+The generated table shows the latest month-year that a healthcare system include patients for the analysis.
+
+```{r}
+adm_date_list <- list()
+
+for (i in sorted_sites) {
+  #print(i)
+  tmp <- get(i)
+  adm_date_table <- tmp[["site_last_admission_date"]]
+
+  adm_date_list[[i]] <- adm_date_table 
+  
+}
+
+adm_date_df <- bind_rows(adm_date_list) %>% 
+  t() %>% 
+  data.frame() %>% 
+  rename(site_last_admission_date = '.') %>% 
+  mutate(site_last_admission_date = gsub("-", "-01-", site_last_admission_date),
+         site_last_admission_date = as.Date(site_last_admission_date, format = '%m-%d-%Y'))
+
+datatable(adm_date_df)
+```
+
+### **Patient Counts**
+
+```{r message=FALSE, warning=FALSE}
+pt_counts_list <- list()
+
+
+for (i in sorted_sites) {
+  #print(i)
+  tmp <- get(i)
+  
+  try(  
+  adult <- tmp[["first_hosp_results"]][["tableone_results"]][["tableone_adults"]][["demo_table"]] %>% 
+    # use 'sex' to calculate total counts (less likely to be masked from straification of smaller numbers such as would be the case if we chose 'age_group')
+    filter(grepl('sex', variable)) %>% 
+    select(contains('n_var')) %>% 
+    summarise_all(., ~ sum(.x)) %>% 
+    mutate(population = 'Adult',
+           site = paste(i)) %>% 
+    select(site, population, everything())
+  )
+  
+  try(  
+  pediatric <- tmp[["first_hosp_results"]][["tableone_results"]][["tableone_pediatrics"]][["demo_table"]] %>% 
+    # use 'sex' to calculate total counts (less likely to be masked from straification of smaller numbers such as would be the case if we chose 'age_group')
+    filter(grepl('sex', variable)) %>% 
+    select(contains('n_var')) %>% 
+    summarise_all(., ~ sum(.x)) %>% 
+    mutate(population = 'Pediatric',
+           site = paste(i)) %>% 
+    select(site, population, everything())
+  )
+
+  pt_counts_list[[i]] <- bind_rows(adult, pediatric)
+  
+}
+
+# remove BCH adult counts - we are excluding these patients from the meta-analysis
+pt_counts_df <- bind_rows(pt_counts_list) %>% 
+  filter(!(site == "BCH_results" & population == "Adult")) %>% 
+  replace(is.na(.), 0) %>% 
+  distinct() %>% 
+  mutate(total_population = rowSums(select(., contains("n_var")), na.rm = TRUE)) %>% 
+  # calculate total (adult + pediatric)
+  group_by(site) %>% 
+  mutate(total_adult_peds = sum(total_population, na.rm = TRUE)) %>% 
+  ungroup()
+  
+  
+datatable(pt_counts_df)
+```
+
+**Save Patient Counts**
+
+```{r}
+write.csv(pt_counts_df, 'tables/site_pt_counts.csv', row.names = FALSE)
+```
+
+

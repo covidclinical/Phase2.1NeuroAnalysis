@@ -1,0 +1,102 @@
+---
+title: "Demographic Pre-processing"
+author: "Meg Hutch"
+date: "2022-11-09"
+output: html_document
+---
+
+Pre-process demographic table for use in downstream demographic figure.
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+source("R/demo_tables.R")
+source("R/utils.R")
+```
+
+## **Import Data from each Healthcare System**
+
+```{r message=FALSE, warning=FALSE}
+# read in files from results folder 
+# this folder contains all of the local healthcare system level analyses
+rdas <- list.files(
+  path = "results",
+  pattern = ".rda",
+  full.names = TRUE
+)
+for (rda in rdas) {
+  load(rda)
+}
+
+rm(rdas, rda)
+
+# create a list of participating healthcare systems from our study tracking spreadsheet
+site_google_url <- "https://docs.google.com/spreadsheets/d/1epcYNd_0jCUMktOHf8mz5v651zy1JALD6PgzobrGWDY/edit?usp=sharing"
+
+# load site parameters
+site_params <- googlesheets4::read_sheet(site_google_url, sheet = 1)
+site_avails <- googlesheets4::read_sheet(site_google_url, sheet = 2)
+
+# filter the list of sites who ran the analysis
+sorted_sites <- site_avails %>%
+  filter(!is.na(date_v4_received)) %>%
+  pull(siteid) %>%
+  paste("results", sep = "_")
+
+# list sites without race
+sites_wo_race <- site_params %>%
+  filter(!include_race) %>%
+  pull(siteid)
+
+# combine all rda files with 'results' in name
+results <- mget(ls(pattern = "results"))
+```
+
+### **Abstract adult & pediatric tables from each healthcare system**
+
+```{r}
+# create list of hospitals for adult and pediatric analyses
+adult_sites = sorted_sites[!sorted_sites %in% c("BCH_results", "GOSH_results")]
+
+pediatric_sites = sorted_sites[!sorted_sites %in% c("VA1_results", "VA2_results", "VA3_results", "VA4_results", "VA5_results")]
+
+demo_table_adult <- create_demo_tableone(sorted_sites = adult_sites, is_pediatric = FALSE)
+
+demo_table_pediatric <- create_demo_tableone(sorted_sites = pediatric_sites, is_pediatric = TRUE)
+```
+
+### **Combine adult and pediatric tables**
+
+```{r}
+demo_table_combine  <- rbind(demo_table_adult, demo_table_pediatric) %>% 
+  select(site, variable, Demo_var, contains('n_var')) %>% 
+  pivot_longer(., cols = c(contains('n_var'))) %>% 
+  group_by(site, variable, Demo_var, name) %>% 
+  mutate(total_variable = sum(value, na.rm = TRUE)) %>% 
+  group_by(site, Demo_var, name) %>% 
+  mutate(total_demo_var = sum(value, na.rm = TRUE))  %>% 
+  ungroup() %>% 
+  select(-Demo_var, -value) %>% 
+  distinct()
+
+demo_table_site <- demo_table_combine %>% 
+  pivot_wider(., id_cols = c("site", "variable"),  
+              names_from = "name", 
+              values_from = c("total_variable", "total_demo_var")) %>% 
+  mutate(NNC_perc = round(total_variable_n_var_None / total_demo_var_n_var_None * 100,1),
+         CNS_perc = round(total_variable_n_var_Central / total_demo_var_n_var_Central * 100,1),
+         PNS_perc = round(total_variable_n_var_Peripheral / total_demo_var_n_var_Peripheral * 100,1)) %>% 
+  rename(NNC_n = 'total_variable_n_var_None',
+         CNS_n = 'total_variable_n_var_Central',
+         PNS_n = 'total_variable_n_var_Peripheral') %>% 
+  select(site, variable, NNC_n, CNS_n, PNS_n, NNC_perc, CNS_perc, PNS_perc) %>% 
+  mutate(NNC = paste0(NNC_n, " (", NNC_perc, "%)"),
+         CNS = paste0(CNS_n, " (", CNS_perc, "%)"),
+         PNS = paste0(PNS_n, " (", PNS_perc, "%)"))
+```
+
+**Save patient demographic data**
+
+```{r}
+save(demo_table_site, file = 'demographic-figure/demographic-data/demo_table_site.rda')
+```
+
