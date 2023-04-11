@@ -58,70 +58,16 @@ for(i in sorted_sites) {
 }
 ```
 
-## **Prepare list of Elixhuaser comorbidities**
-
-First, we will create a list of comorbidities, which will help us deal with data cleaning issues.
-
-Comorbidity list obtained from [icd](https://github.com/jackwasey/icd) package icd/data/mappingNames, which was used to calculate the Elixhauser comorbidity score in the analysis
-
-```{r}
-# HTN marked together as combined, but DM not.
-names_elix_htn <- list(
-  "01" = "Congestive heart failure",
-  "02" = "Cardiac arrhythmias",
-  "03" = "Valvular disease",
-  "04" = "Pulmonary circulation disorders",
-  "05" = "Peripheral vascular disorders",
-  "06a" = "Hypertension, uncomplicated",
-  "06b" = "Hypertension, complicated",
-  "07" = "Paralysis",
-  "08" = "Other neurological disorders",
-  "09" = "Chronic pulmonary disease",
-  "10" = "Diabetes, uncomplicated",
-  "11" = "Diabetes, complicated",
-  "12" = "Hypothyroidism",
-  "13" = "Renal failure",
-  "14" = "Liver disease",
-  "15" = "Peptic ulcer disease excluding bleeding",
-  "16" = "HIV/AIDS",
-  "17" = "Lymphoma",
-  "18" = "Metastatic cancer",
-  "19" = "Solid tumor without metastasis",
-  "20" = "Rheumatoid arthritis/collagen vascular diseases",
-  "21" = "Coagulopathy",
-  "22" = "Obesity",
-  "23" = "Weight loss",
-  "24" = "Fluid and electrolye disorders",
-  "25" = "Blood loss anemia",
-  "26" = "Deficiency anemias",
-  "27" = "Alcohol abuse",
-  "28" = "Drug abuse",
-  "29" = "Psychoses",
-  "30" = "Depression"
-)
-
-# Elixhauser with HTN combined:
-comorb_list <- names_elix_htn
-comorb_list["06b"] <- NULL
-comorb_list["06a"] <- "Hypertension, combined"
-names(comorb_list)[6] <- "06"
-
-Comorbidity <- unlist(comorb_list)
-Comorbidity <- as.data.frame(Comorbidity)
-
-Comorbidity <- tibble::rownames_to_column(Comorbidity, "Abbreviation")
-```
-
-### **Calculate total patient counts by neuro status**
+### **Calculate total patient counts by neurological status**
 
 These counts will be used for Table 1 and determining denominator for comorbidity prevalence
 
 ```{r}
+# load in previously generated patient count table by site
 pt_counts <- read.csv('tables/site_pt_counts.csv') 
 
 adult_count <- pt_counts %>% 
-  filter(population == "Adult",
-         !site == "BCH_results") %>% 
+  filter(population == "Adult") %>% 
   mutate(None_n = sum(n_var_None, na.rm = TRUE),
          PNS_n = sum(n_var_Peripheral, na.rm = TRUE),
          CNS_n = sum(n_var_Central, na.rm = TRUE))
@@ -145,7 +91,7 @@ neuro_pt_counts <- adult_count %>%
 ### **Abstract and process comorbidity data across healthcare systems**
 
 ```{r}
-# create empty list to store comorbidities
+# create empty lists to store comorbidities
 comorb_table_list_adult <- list()
 comorb_table_list_pediatric <- list()
 
@@ -162,9 +108,11 @@ for (i in sorted_sites[!sorted_sites %in% c("BCH_comorb_results", "GOSH_comorb_r
     # because Elixhauser comorbidity index has two diabetes categories which capture the same diagnoses once we employ our truncation method, we will remove one of the diabetes categories
     filter(!Comorbidity == "Diabetes, uncomplicated") %>%
         mutate(Comorbidity = if_else(Comorbidity == "Diabetes, complicated", "Diabetes", Comorbidity),
-              # rename hypertension
-              Comorbidity = if_else(Comorbidity == "Hypertension, combined", "Hypertension", Comorbidity)) %>% 
-    select(site, Comorbidity,  n_Total, n_None, n_Central, n_Peripheral)
+              # rename hypertension 
+              Comorbidity = if_else(Comorbidity == "Hypertension, combined", "Hypertension", Comorbidity),
+              # rename neurological disorders
+              Comorbidity = if_else(Comorbidity == "Other neurological disorders", "Neurological disorders", Comorbidity)) %>% 
+    select(site, Comorbidity,  n_Total, n_None, n_Central, n_Peripheral) 
 }
 
 ## pediatrics
@@ -182,7 +130,9 @@ for (i in sorted_sites[!sorted_sites %in% c("VA1_comorb_results", "VA2_comorb_re
     filter(!Comorbidity == "Diabetes, uncomplicated") %>%
         mutate(Comorbidity = if_else(Comorbidity == "Diabetes, complicated", "Diabetes", Comorbidity),
                # rename hypertension
-               Comorbidity = if_else(Comorbidity == "Hypertension, combined", "Hypertension", Comorbidity)) %>% 
+               Comorbidity = if_else(Comorbidity == "Hypertension, combined", "Hypertension", Comorbidity),
+               # rename neurological disorders
+              Comorbidity = if_else(Comorbidity == "Other neurological disorders", "Neurological disorders", Comorbidity)) %>% 
     select(site, Comorbidity,  n_Total, n_None, n_Central, n_Peripheral)
 }
 
@@ -197,9 +147,14 @@ comorb_table_pediatric <- comorb_table_list_pediatric %>%
 
 comorb_table_all <- rbind(comorb_table_adult, comorb_table_pediatric)
 
+# correct electrolyte typo
+comorb_table_all = comorb_table_all %>% 
+  mutate(Comorbidity = if_else(Comorbidity == "Fluid and electrolye disorders", "Fluid and electrolyte disorders", Comorbidity))
+
 # calculate total number of patients with each comorbidity across neurological status
 comorb_table_wide <- comorb_table_all %>%
   data.frame() %>%
+  # join neuro patient counts to add denominator of total neuro population
   left_join(., neuro_pt_counts, by = 'population') %>% 
   group_by(Comorbidity, population) %>%
   mutate(Comorb_Total = sum(n_Total, na.rm = TRUE),

@@ -5,7 +5,7 @@ date: "2022-11-01"
 output: html_document
 ---
 
-This notebook organizes each participating healthcare system's data to abstract the date up to which patient's were admitted. Additionally, we generate a table of each site's adult, pediatric, and total patient counts.
+This notebook organizes each participating healthcare system's data to abstract the date up to which patients were admitted. Additionally, we generate a table of each site's adult, pediatric, and total patient counts.
 
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -89,24 +89,26 @@ for (i in sorted_sites) {
   
   try(  
   adult <- tmp[["first_hosp_results"]][["tableone_results"]][["tableone_adults"]][["demo_table"]] %>% 
-    # use 'sex' to calculate total counts (less likely to be masked from straification of smaller numbers such as would be the case if we chose 'age_group')
+    # use 'sex' to calculate total counts (less likely to be masked from stratification of smaller numbers such as would be the case if we chose 'age_group')
     filter(grepl('sex', variable)) %>% 
     select(contains('n_var')) %>% 
     summarise_all(., ~ sum(.x)) %>% 
     mutate(population = 'Adult',
            site = paste(i)) %>% 
-    select(site, population, everything())
+    select(site, population, everything()),
+  silent = TRUE
   )
   
   try(  
   pediatric <- tmp[["first_hosp_results"]][["tableone_results"]][["tableone_pediatrics"]][["demo_table"]] %>% 
-    # use 'sex' to calculate total counts (less likely to be masked from straification of smaller numbers such as would be the case if we chose 'age_group')
+    # use 'sex' to calculate total counts (less likely to be masked from stratification of smaller numbers such as would be the case if we chose 'age_group')
     filter(grepl('sex', variable)) %>% 
     select(contains('n_var')) %>% 
     summarise_all(., ~ sum(.x)) %>% 
     mutate(population = 'Pediatric',
            site = paste(i)) %>% 
-    select(site, population, everything())
+    select(site, population, everything()), 
+  silent = TRUE
   )
 
   pt_counts_list[[i]] <- bind_rows(adult, pediatric)

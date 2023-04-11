@@ -6,7 +6,7 @@
 
     a\. Used for **Supplementary Table 1. Description of participating healthcare systems**
 
-    b\. Also reviewed information from the [4CE Health Systems Participating google sheet](https://docs.google.com/spreadsheets/d/1Xl9juDBXt86P3xQtsoTaBl2zPl1BIiAG9DI3Rotyqp8/edit#gid=212461777) on Dec 26, 2022
+    b\. Supplementary Table 1 also contains healthcare system data as reported on the [4CE Health Systems Participating google sheet](https://docs.google.com/spreadsheets/d/1Xl9juDBXt86P3xQtsoTaBl2zPl1BIiAG9DI3Rotyqp8/edit#gid=212461777) on Dec 26, 2022
 
 2.  `02_demographic-preprocess.Rmd` - processes the demographic data by healthcare system.
 
