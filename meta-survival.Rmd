@@ -5,11 +5,6 @@ output: html_document
 
 Perform primary meta-analysis on Cox-PH models from each site.
 
-```{r}
-setwd("C:/Users/User/Box Sync/Projects/nu4ce/neuro/Phase2.1NeuroRSummaries/analysis_v2")
-```
-
-
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
 library(metafor)
@@ -60,17 +55,15 @@ results <- mget(ls(pattern = "results"))
 pt_counts_df <- read.csv('tables/site_pt_counts.csv')
 ```
 
-
-## Define outcomes
+## Define parameters
 
 ```{r}
-outcomes <-
-  c(
-    "time_first_discharge_reg_elix",
-    "deceased_reg_elix"
-  )
-```
+outcomes <- c("time_first_discharge_reg_elix", "deceased_reg_elix")
 
+comorb_adj <- c("lpca", "score", "ind")
+
+censor_cut <- c("30", "60", "90")
+```
 
 ## Identify sites to include in the analysis
 
@@ -79,13 +72,6 @@ We will only include a site if they have >= 3 neuro patients
 ```{r}
 sites_adult <- pt_counts_df %>% 
   filter(population == "Adult") %>% 
-  mutate(neuro_sum = n_var_Central + n_var_Peripheral) %>% 
-  filter(!neuro_sum < 3) %>% 
-  distinct(site) %>% 
-  mutate(site = gsub("_results", "", site))
-
-sites_pediatric <- pt_counts_df %>% 
-  filter(population == "Pediatric") %>% 
   mutate(neuro_sum = n_var_Central + n_var_Peripheral) %>% 
   filter(!neuro_sum < 3) %>% 
   distinct(site) %>% 
@@ -107,20 +93,6 @@ for (outcome_i in outcomes) {
 }
 ```
 
-## Get Cox model results - Pediatrics
-
-```{r}
-cox_results_pediatrics <- list()
-
-for (outcome_i in outcomes) {
-  cox_results_pediatrics[[outcome_i]] <-
-    results %>%
-    lapply(get_cox_row, population = "pediatrics", comorb_method = "ind", censor_cutoff = "90", outcome = outcome_i) %>%
-    bind_rows() %>%
-    mutate(outcome = outcome_i)
-}
-```
-
 ## Random effects meta-analysis - CNS
 
 set sm = "HR" when estimate is logHR (which is coef in our model): https://cran.r-project.org/web/packages/meta/meta.pdf - (search logHR in cran to see example)
@@ -135,30 +107,6 @@ for (outcome_i in outcomes) {
   meta_results_adults_cns[[outcome_i]] <-
     cox_results_adults[[outcome_i]] %>%
     filter(site %in% sites_adult$site) %>% 
-    bind_rows() %>%
-    data.frame() %>%
-    filter(variable == "neuro_postCentral") %>%
-    metagen(
-      TE = coef,
-      seTE = se.coef.,
-      data = .,
-      sm = "HR", # hazard ratios
-      comb.random = TRUE,
-      comb.fixed = FALSE,
-      method.tau = "DL", # default tau method
-      hakn = FALSE,
-      prediction = TRUE,
-      studlab = site
-    )
-}
-
-## pediatrics
-meta_results_pediatrics_cns <- list()
-
-for (outcome_i in outcomes) {
-  meta_results_pediatrics_cns[[outcome_i]] <-
-    cox_results_pediatrics[[outcome_i]] %>%
-    filter(site %in% sites_pediatric$site) %>% 
     bind_rows() %>%
     data.frame() %>%
     filter(variable == "neuro_postCentral") %>%
@@ -204,31 +152,6 @@ for (outcome_i in outcomes) {
       studlab = site
     )
 }
-
-## pediatrics
-meta_results_pediatrics_pns <- list()
-
-for (outcome_i in outcomes) {
-  meta_results_pediatrics_pns[[outcome_i]] <-
-    cox_results_pediatrics[[outcome_i]] %>%
-    filter(site %in% sites_pediatric$site) %>% 
-    bind_rows() %>%
-    data.frame() %>%
-    filter(variable == "neuro_postPeripheral") %>%
-    metagen(
-      TE = coef,
-      seTE = se.coef.,
-      data = .,
-      sm = "HR", # hazard ratios
-      comb.random = TRUE,
-      comb.fixed = FALSE,
-      method.tau = "DL", # default tau method
-      hakn = FALSE,
-      prediction = TRUE,
-      studlab = site
-    )
-}
-
 ```
 
 ## Format meta results
@@ -236,11 +159,9 @@ for (outcome_i in outcomes) {
 ```{r}
 # cns
 meta_results_adults_cns_df <- format_meta(meta_results_adults_cns)
-meta_results_pediatrics_cns_df <- format_meta(meta_results_pediatrics_cns)
 
 # pns
 meta_results_adults_pns_df <- format_meta(meta_results_adults_pns)
-meta_results_pediatrics_pns_df <- format_meta(meta_results_pediatrics_pns)
 ```
 
 ### save weights to generate the survival curves
@@ -259,56 +180,28 @@ $w^*_k = \frac{1}{s^2 + tau^2}$
 
 
 ```{r}
-# adult weights
-save_weights(meta_results_df = meta_results_adults_cns_df,
-             population = "adults", 
-             comorb_method = "lpca", 
-             censor_cutoff = "60", 
-             cns_pns = "CNS")
-
-save_weights(meta_results_df = meta_results_adults_pns_df,
-             population = "adults", 
-             comorb_method = "lpca", 
-             censor_cutoff = "60", 
-             cns_pns = "PNS")
-
-save_weights(meta_results_df = meta_results_adults_cns_df,
-             population = "adults", 
-             comorb_method = "ind", 
-             censor_cutoff = "90", 
-             cns_pns = "CNS")
-
-save_weights(meta_results_df = meta_results_adults_pns_df,
-             population = "adults", 
-             comorb_method = "ind", 
-             censor_cutoff = "90", 
-             cns_pns = "PNS")
-
-# pediatric weights
-save_weights(meta_results_df = meta_results_pediatrics_cns_df,
-             population = "pediatrics", 
-             comorb_method = "lpca", 
-             censor_cutoff = "60", 
-             cns_pns = "CNS")
-
-save_weights(meta_results_df = meta_results_pediatrics_pns_df,
-             population = "pediatrics", 
-             comorb_method = "lpca", 
-             censor_cutoff = "60", 
-             cns_pns = "PNS")
+# save all cns weights
+for (outcome_i in outcomes) {
+  
+  save_weights(meta_results_df = meta_results_adults_cns_df,
+               population = "adults", 
+               outcome = outcome_i, 
+               comorb_method = "ind", 
+               censor_cutoff = "90",
+               cns_pns = "CNS")
+}
 
 
-save_weights(meta_results_df = meta_results_pediatrics_cns_df,
-             population = "pediatrics", 
-             comorb_method = "ind", 
-             censor_cutoff = "90", 
-             cns_pns = "CNS")
-
-save_weights(meta_results_df = meta_results_pediatrics_pns_df,
-             population = "pediatrics", 
-             comorb_method = "ind", 
-             censor_cutoff = "90", 
-             cns_pns = "PNS")
+# save all pns weights
+for (outcome_i in outcomes) {
+  
+  save_weights(meta_results_df = meta_results_adults_pns_df,
+               population = "adults", 
+               outcome = outcome_i, 
+               comorb_method = "ind", 
+               censor_cutoff = "90",
+               cns_pns = "PNS")
+}
 ```
 
 **Prepare data for forest plots**
@@ -317,11 +210,27 @@ save_weights(meta_results_df = meta_results_pediatrics_pns_df,
 # adults
 meta_results_adults_cns_df_forest = prepare_data_forest_plots(meta_results_adults_cns_df)
 meta_results_adults_pns_df_forest = prepare_data_forest_plots(meta_results_adults_pns_df)
-
-# pediatrics
-meta_results_pediatrics_cns_df_forest = prepare_data_forest_plots(meta_results_pediatrics_cns_df)
-meta_results_pediatrics_pns_df_forest = prepare_data_forest_plots(meta_results_pediatrics_pns_df)
 ```
+
+**Tidy up results**
+
+```{r}
+meta_results_adults_cns_df_forest_tidy <- meta_results_adults_cns_df_forest %>% 
+  distinct(analysis, TE.random, lower.random, upper.random,`p-value`, lower.predict, upper.predict, I2, lower.I2, upper.I2, H, lower.H, upper.H, tau2, lower.tau2, upper.tau2, CI) %>% 
+  mutate(neuro_status = "CNS") %>% 
+  select(neuro_status, everything())
+
+meta_results_adults_pns_df_forest_tidy <- meta_results_adults_pns_df_forest %>% 
+  distinct(analysis, TE.random, lower.random, upper.random,`p-value`, lower.predict, upper.predict, I2, lower.I2, upper.I2, H, lower.H, upper.H, tau2, lower.tau2, upper.tau2, CI) %>% 
+  mutate(neuro_status = "PNS") %>% 
+  select(neuro_status, everything())
+
+meta_results_tidy <- rbind(meta_results_adults_cns_df_forest_tidy, 
+                           meta_results_adults_pns_df_forest_tidy)
+
+write.csv(meta_results_tidy, "tables/Table2_meta_results.csv", row.names = FALSE)
+```
+
 
 create a scale function to identify the min and max CI for each site, excluding sites with values of 'Inf' or our invalid sites
 
@@ -582,7 +491,7 @@ shapes <- rep(16, times = nrow(deceased_results))
 shapes[length(shapes)] <- 18
 sizes <- rep(3.25, times = nrow(deceased_results))
 sizes[length(sizes)] <- 5
-scale <- scale_plot(deceased_results, site_exclude = c("ICSM"))
+scale <- scale_plot(deceased_results, site_exclude = c("ICSM", "HPG23"))
 
 # note: `Hazard Ratio ` with confidence intervals has an extra space and used by `right_side_data` param
 p4 <- forester(
@@ -608,268 +517,3 @@ p4 <- forester(
 p4
 ```
 
-# Pediatrics
-
-### **CNS - Pediatrics: Time to First Discharge**
-
-```{r fig.width=8, message=FALSE, warning=FALSE}
-te.random = meta_results_pediatrics_cns_df_forest %>% 
-  filter(analysis == "time_first_discharge_reg_elix") %>% 
-  distinct(TE.random) %>% 
-  as.numeric() %>% 
-  round(.,2)
-
-te.random.ci_lower = meta_results_pediatrics_cns_df_forest %>% 
-  filter(analysis == "time_first_discharge_reg_elix") %>% 
-  distinct(lower.random) %>% 
-  as.numeric() 
-
-te.random.ci_upper = meta_results_pediatrics_cns_df_forest %>% 
-  filter(analysis == "time_first_discharge_reg_elix") %>% 
-  distinct(upper.random) %>% 
-  as.numeric() 
-
-length_stay_first_results <- meta_results_pediatrics_cns_df_forest %>%
-  slice(grep(paste("time_first_discharge_reg_elix", collapse = "|"), analysis)) %>% 
-  #add_row(.before = 1) %>%
-  add_row(.after = nrow(.)) %>% 
-  mutate(Site = ifelse(is.na(Site), "Effect size", Site),
-         `Hazard Ratio` = ifelse(is.na(`Hazard Ratio`), round(te.random, 2), `Hazard Ratio`),
-         `p-value` = ifelse(`p-value` < 0.001, "< .001*", round(`p-value`, 3))) %>% 
-  fill(`p-value`, .direction = "down") %>% 
-  mutate(`p-value` = ifelse(Site == "Effect size", `p-value`, ""),
-         CI.Low = ifelse(Site == "Effect size", te.random.ci_lower, CI.Low),
-         CI.High = ifelse(Site == "Effect size", te.random.ci_upper, CI.High),
-         `Hazard Ratio ` = paste(`Hazard Ratio`, '(', CI.Low, ',', CI.High, ')'))
-
-
-## define forest plot shapes
-# shape #16 is normal circle; #18 is diamond
-shapes <- rep(16, times = nrow(length_stay_first_results))
-shapes[length(shapes)] <- 18
-sizes <- rep(3.25, times = nrow(length_stay_first_results))
-sizes[length(sizes)] <- 5
-scale <- scale_plot(length_stay_first_results, site_exclude = "BCH")
-
-# note: `Hazard Ratio ` with confidence intervals has an extra space and used by `right_side_data` param
-p5 <- forester(
-  left_side_data = length_stay_first_results %>% 
-    select(Site) %>% 
-    rename("Healthcare System" = "Site"),
-  estimate = length_stay_first_results$`Hazard Ratio`,
-  ci_low = length_stay_first_results$CI.Low,
-  ci_high = length_stay_first_results$CI.High,
-  right_side_data = length_stay_first_results[, c("Hazard Ratio ", "p-value")],
-  display = TRUE,
-  nudge_x = .5,
-  font_family = "arial",
-  arrows = TRUE,
-  arrow_labels = c("Decreased Risk", "Increased Risk"),
-  null_line_at = 1,
-  xlim = c(scale$min_est, scale$max_est),
-  #xbreaks = c(scale$min_est, 1, scale$max_est),
-  point_sizes = sizes,
-  point_shapes = shapes,
-  file_path = here::here(paste0("figures/forestplot_pediatric_cns_discharge.png")))
-
-p5
-```
-
-### **CNS - Pediatrics: Time to mortality**
-
-**HR too large**
-
-```{r eval=FALSE, fig.width=8, message=FALSE, warning=FALSE, include=TRUE}
-te.random = meta_results_pediatrics_cns_df_forest %>% 
-  filter(analysis == "deceased_reg_elix") %>% 
-  distinct(TE.random) %>% 
-  as.numeric() %>% 
-  round(.,2)
-
-te.random.ci_lower = meta_results_pediatrics_cns_df_forest %>% 
-  filter(analysis == "deceased_reg_elix") %>% 
-  distinct(lower.random) %>% 
-  as.numeric() 
-
-te.random.ci_upper = meta_results_pediatrics_cns_df_forest %>% 
-  filter(analysis == "deceased_reg_elix") %>% 
-  distinct(upper.random) %>% 
-  as.numeric() 
-
-deceased_results <- meta_results_pediatrics_cns_df_forest %>%
-  slice(grep(paste("deceased_reg_elix", collapse = "|"), analysis)) %>% 
-  #add_row(.before = 1) %>%
-  add_row(.after = nrow(.)) %>% 
-  mutate(Site = ifelse(is.na(Site), "Effect size", Site),
-         `Hazard Ratio` = ifelse(is.na(`Hazard Ratio`), round(te.random, 2), `Hazard Ratio`),
-         `p-value` = ifelse(`p-value` < 0.001, "< .001*", round(`p-value`, 3))) %>% 
-  fill(`p-value`, .direction = "down") %>% 
-  mutate(`p-value` = ifelse(Site == "Effect size", `p-value`, ""),
-         CI.Low = ifelse(Site == "Effect size", te.random.ci_lower, CI.Low),
-         CI.High = ifelse(Site == "Effect size", te.random.ci_upper, CI.High),
-         `Hazard Ratio ` = paste(`Hazard Ratio`, '(', CI.Low, ',', CI.High, ')'))
-
-
-## define forest plot shapes
-# shape #16 is normal circle; #18 is diamond
-shapes <- rep(16, times = nrow(deceased_results))
-shapes[length(shapes)] <- 18
-sizes <- rep(3.25, times = nrow(deceased_results))
-sizes[length(sizes)] <- 5
-scale <- scale_plot(deceased_results, site_exclude = "BCH")
-
-# note: `Hazard Ratio ` with confidence intervals has an extra space and used by `right_side_data` param
-p6 <- forester(
-  left_side_data = deceased_results %>% 
-    select(Site) %>% 
-    rename("Healthcare System" = "Site"),
-  estimate = deceased_results$`Hazard Ratio`,
-  ci_low = deceased_results$CI.Low,
-  ci_high = deceased_results$CI.High,
-  right_side_data = deceased_results[, c("Hazard Ratio ", "p-value")],
-  display = TRUE,
-  nudge_x = .5,
-  font_family = "arial",
-  arrows = TRUE,
-  arrow_labels = c("Decreased Risk", "Increased Risk"),
-  null_line_at = 1,
-  xlim = c(scale$min_est, scale$max_est),
-  #xbreaks = c(scale$min_est, 1, scale$max_est),
-  point_sizes = sizes,
-  point_shapes = shapes,
-  file_path = here::here(paste0("figures/forestplot_pediatric_cns_mortality.png")))
-
-p6
-```
-
-### **CNS - Pediatrics: Time to First Discharge**
-
-```{r fig.width=8, message=FALSE, warning=FALSE}
-te.random = meta_results_pediatrics_pns_df_forest %>% 
-  filter(analysis == "time_first_discharge_reg_elix") %>% 
-  distinct(TE.random) %>% 
-  as.numeric() %>% 
-  round(.,2)
-
-te.random.ci_lower = meta_results_pediatrics_pns_df_forest %>% 
-  filter(analysis == "time_first_discharge_reg_elix") %>% 
-  distinct(lower.random) %>% 
-  as.numeric() 
-
-te.random.ci_upper = meta_results_pediatrics_pns_df_forest %>% 
-  filter(analysis == "time_first_discharge_reg_elix") %>% 
-  distinct(upper.random) %>% 
-  as.numeric() 
-
-length_stay_first_results <- meta_results_pediatrics_pns_df_forest %>%
-  slice(grep(paste("time_first_discharge_reg_elix", collapse = "|"), analysis)) %>% 
-  #add_row(.before = 1) %>%
-  add_row(.after = nrow(.)) %>% 
-  mutate(Site = ifelse(is.na(Site), "Effect size", Site),
-         `Hazard Ratio` = ifelse(is.na(`Hazard Ratio`), round(te.random, 2), `Hazard Ratio`),
-         `p-value` = ifelse(`p-value` < 0.001, "< .001*", round(`p-value`, 3))) %>% 
-  fill(`p-value`, .direction = "down") %>% 
-  mutate(`p-value` = ifelse(Site == "Effect size", `p-value`, ""),
-         CI.Low = ifelse(Site == "Effect size", te.random.ci_lower, CI.Low),
-         CI.High = ifelse(Site == "Effect size", te.random.ci_upper, CI.High),
-         `Hazard Ratio ` = paste(`Hazard Ratio`, '(', CI.Low, ',', CI.High, ')'))
-
-
-## define forest plot shapes
-# shape #16 is normal circle; #18 is diamond
-shapes <- rep(16, times = nrow(length_stay_first_results))
-shapes[length(shapes)] <- 18
-sizes <- rep(3.25, times = nrow(length_stay_first_results))
-sizes[length(sizes)] <- 5
-scale <- scale_plot(length_stay_first_results, site_exclude = "BCH")
-
-# note: `Hazard Ratio ` with confidence intervals has an extra space and used by `right_side_data` param
-p7 <- forester(
-  left_side_data = length_stay_first_results %>% 
-    select(Site) %>% 
-    rename("Healthcare System" = "Site"),
-  estimate = length_stay_first_results$`Hazard Ratio`,
-  ci_low = length_stay_first_results$CI.Low,
-  ci_high = length_stay_first_results$CI.High,
-  right_side_data = length_stay_first_results[, c("Hazard Ratio ", "p-value")],
-  display = TRUE,
-  nudge_x = .5,
-  font_family = "arial",
-  arrows = TRUE,
-  arrow_labels = c("Decreased Risk", "Increased Risk"),
-  null_line_at = 1,
-  xlim = c(scale$min_est, scale$max_est),
-  #xbreaks = c(scale$min_est, 1, scale$max_est),
-  point_sizes = sizes,
-  point_shapes = shapes,
-  file_path = here::here(paste0("figures/forestplot_pediatric_pns_discharge.png")))
-
-p7
-```
-
-### **CNS - Pediatrics: Time to mortality**
-
-**HR too large - cannot run**
-
-```{r eval=FALSE, fig.width=8, message=FALSE, warning=FALSE, include=TRUE}
-te.random = meta_results_pediatrics_pns_df_forest %>% 
-  filter(analysis == "deceased_reg_elix") %>% 
-  distinct(TE.random) %>% 
-  as.numeric() %>% 
-  round(.,2)
-
-te.random.ci_lower = meta_results_pediatrics_pns_df_forest %>% 
-  filter(analysis == "deceased_reg_elix") %>% 
-  distinct(lower.random) %>% 
-  as.numeric() 
-
-te.random.ci_upper = meta_results_pediatrics_pns_df_forest %>% 
-  filter(analysis == "deceased_reg_elix") %>% 
-  distinct(upper.random) %>% 
-  as.numeric() 
-
-deceased_results <- meta_results_pediatrics_pns_df_forest %>%
-  slice(grep(paste("deceased_reg_elix", collapse = "|"), analysis)) %>% 
-  #add_row(.before = 1) %>%
-  add_row(.after = nrow(.)) %>% 
-  mutate(Site = ifelse(is.na(Site), "Effect size", Site),
-         `Hazard Ratio` = ifelse(is.na(`Hazard Ratio`), round(te.random, 2), `Hazard Ratio`),
-         `p-value` = ifelse(`p-value` < 0.001, "< .001*", round(`p-value`, 3))) %>% 
-  fill(`p-value`, .direction = "down") %>% 
-  mutate(`p-value` = ifelse(Site == "Effect size", `p-value`, ""),
-         CI.Low = ifelse(Site == "Effect size", te.random.ci_lower, CI.Low),
-         CI.High = ifelse(Site == "Effect size", te.random.ci_upper, CI.High),
-         `Hazard Ratio ` = paste(`Hazard Ratio`, '(', CI.Low, ',', CI.High, ')'))
-
-
-## define forest plot shapes
-# shape #16 is normal circle; #18 is diamond
-shapes <- rep(16, times = nrow(deceased_results))
-shapes[length(shapes)] <- 18
-sizes <- rep(3.25, times = nrow(deceased_results))
-sizes[length(sizes)] <- 5
-scale <- scale_plot(deceased_results, site_exclude = "BCH")
-
-# note: `Hazard Ratio ` with confidence intervals has an extra space and used by `right_side_data` param
-p8 <- forester(
-  left_side_data = deceased_results %>% 
-    select(Site) %>% 
-    rename("Healthcare System" = "Site"),
-  estimate = deceased_results$`Hazard Ratio`,
-  ci_low = deceased_results$CI.Low,
-  ci_high = deceased_results$CI.High,
-  right_side_data = deceased_results[, c("Hazard Ratio ", "p-value")],
-  display = TRUE,
-  nudge_x = .5,
-  font_family = "arial",
-  arrows = TRUE,
-  arrow_labels = c("Decreased Risk", "Increased Risk"),
-  null_line_at = 1,
-  xlim = c(scale$min_est, scale$max_est),
-  #xbreaks = c(scale$min_est, 1, scale$max_est),
-  point_sizes = sizes,
-  point_shapes = shapes,
-  file_path = here::here(paste0("figures/forestplot_pediatrics_pns_mortality.png")))
-
-p8
-```

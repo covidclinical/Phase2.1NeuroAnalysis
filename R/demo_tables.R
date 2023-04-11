@@ -114,11 +114,11 @@ create_clinical_tableone <- function(sorted_sites, is_pediatric = FALSE) {
     mutate(across(None_first:CNS_max, ~ gsub(",", "", .x))) %>%
     mutate(across(None_first:CNS_max, ~ as.numeric(.) %>%
                     transform_count())) %>%
-    mutate(across(None_first:CNS_max, ~ round(.,1)))%>%
+    mutate(across(None_first:CNS_max, ~ round(.,1))) %>%
     mutate(None = paste0(None_first, " [", None_min, ",", None_max, "]"),
            Central = paste0(CNS_first, " [", CNS_min, ",", CNS_max, "]"),
            Peripheral = paste0(PNS_first, " [", PNS_min, ",", PNS_max, "]")) %>%
-    select(site, name, None, Peripheral, Central)
+    select(site, name, None, Central, Peripheral)
 
   # remove the old pre-admission scores
   clinical_table_wide <- clinical_table_wide %>%
@@ -146,18 +146,22 @@ clean_clinical_tables <- function(clinical_table) {
   # for each variable, we will first remove the [min, max] from the median in order to convert the variable to numeric
   # then we will calculate summary statistics (mean, median, min, max, sd)
   for (i in vars_to_process) {
+
+    # calculate stats per neuro status
     mod_table <- clinical_table %>%
       rename("var" = name) %>%
       filter(var == i) %>%
       mutate(
         site = toupper(site),
         None = sub("(\\(.*|\\[.*)", "", None),
-        Peripheral = sub("(\\(.*|\\[.*)", "", Peripheral),
-        Central = sub("(\\(.*|\\[.*)", "", Central)
+        Central = sub("(\\(.*|\\[.*)", "", Central),
+        Peripheral = sub("(\\(.*|\\[.*)", "", Peripheral)
       ) %>%
       mutate(across(None:Central, as.numeric)) %>%
       as_tibble() %>%
-      select(-site, -var) %>%
+      select(-site, -var)
+
+    mod_table_neuro <- mod_table %>%
       summarise_all(list(
         mean = mean,
         median = median,
@@ -167,6 +171,16 @@ clean_clinical_tables <- function(clinical_table) {
       ),
       na.rm = TRUE
       )
+
+    # calculate median across neuro strata at each site and then the overall mean of the median and sd for all sites
+    mod_table$median_site <- apply(mod_table[c('None', 'Central', 'Peripheral')], 1, median, na.rm=TRUE)
+    mod_table$all_mean <- mean(mod_table$median_site, na.rm=TRUE)
+    mod_table$all_sd <- sd(mod_table$median_site, na.rm=TRUE)
+
+    mod_table <- mod_table %>%
+      distinct(all_mean, all_sd)
+
+    mod_table <- cbind(mod_table, mod_table_neuro)
 
     processed_list[[i]] <- mod_table
   }
@@ -180,13 +194,15 @@ clean_clinical_tables <- function(clinical_table) {
     # get average of the medians
     mutate(
       None = glue("{None_mean} ({None_sd})"),
-      Peripheral = glue("{Peripheral_mean} ({Peripheral_sd})"),
       Central = glue("{Central_mean} ({Central_sd})"),
+      Peripheral = glue("{Peripheral_mean} ({Peripheral_sd})"),
       N = NA
     ) %>%
-    select(`Table 1`, N, None, Peripheral, Central) %>%
+    select(`Table 1`, N, all_mean, all_sd, None, Central, Peripheral) %>%
     mutate(`Table 1` = gsub("\\[|\\]", " ", `Table 1`),
-           `Table 1` = gsub("Min, Max", "(sd)", `Table 1`))
+           `Table 1` = gsub("Min, Max", "(sd)", `Table 1`),
+           N = paste0(all_mean, " (", all_sd, ")")) %>%
+    select(`Table 1`, N, None, Central, Peripheral)
 
 }
 
@@ -229,7 +245,7 @@ create_tableone <- function(demo_table, clinical_table) {
   )
 
   # filter and order table by specified variables
-  tableOne_raw <- tableOne_inter %>%
+  tableOne <- tableOne_inter %>%
     # use 'sex' to calculate total counts (less likely to be masked from straification of smaller numbers such as would be the case if we chose 'age_group')
     filter(Demo_var == "sex") %>%
     summarise(across(where(is.numeric), sum)) %>%
@@ -263,24 +279,9 @@ create_tableone <- function(demo_table, clinical_table) {
       replacement = ""
     )) %>%
     rename("Table 1" = Demo_var_i) %>%
+    mutate(N = as.character(N)) %>%
     bind_rows(clinical_table) %>%
-    slice(match(row_order, `Table 1`))
-
-  # Add total patient counts to table 1
-    tableOne = tableOne_raw %>%
-    mutate(
-      N = case_when(
-        grepl("Median time to first discharge", `Table 1`) ~ get_table_n(df = tableOne_raw, "Discharged"),
-        grepl("Median time to last discharge", `Table 1`) ~ get_table_n(df = tableOne_raw, "Discharged"),
-        grepl("Median time to severe", `Table 1`) ~ get_table_n(df = tableOne_raw, "Severe"),
-        grepl("death", `Table 1`) ~ get_table_n(df = tableOne_raw, "Deceased"),
-        grepl("readmission", `Table 1`) ~ get_table_n(df = tableOne_raw, "Readmitted"),
-        grepl("Median Elixhauser score", `Table 1`) ~ get_table_n(df = tableOne_raw, "All Patients"),
-        grepl("Median pre admission cns", `Table 1`) ~ get_table_n(df = tableOne_raw, "All Patients"),
-        grepl("Median pre admission pns", `Table 1`) ~ get_table_n(df = tableOne_raw, "All Patients"),
-        TRUE ~ N
-      )
-    ) %>%
+    slice(match(row_order, `Table 1`)) %>%
     select(`Table 1`, N, None, Central, Peripheral)
 
     return(tableOne)

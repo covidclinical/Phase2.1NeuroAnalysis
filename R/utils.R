@@ -28,8 +28,13 @@ calc_chisq <- function(var, tableOne_sums, none_n, pns_n, cns_n) {
     mutate(none_dif = none_n - n_var_None,
            pns_dif = pns_n - n_var_Peripheral,
            cns_dif = cns_n - n_var_Central) %>%
+    # due to blurring, sometimes the numbers can be < 0. We will convert to 0
+    mutate(none_dif = if_else(none_dif < 0, 0, none_dif),
+           pns_dif = if_else(pns_dif < 0, 0, pns_dif),
+           cns_dif = if_else(cns_dif < 0, 0, cns_dif)) %>%
     as.integer() %>%
     matrix(nrow = 2, ncol = 3, byrow = TRUE)
+
 
   result <- chisq.test(unlist(mat))
 

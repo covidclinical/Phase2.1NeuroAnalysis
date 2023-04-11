@@ -1,7 +1,7 @@
 ---
 title: "**COVID-19 and Neurological Illness - Patient Characteristics**"
 author: "Meg Hutch, Ji Son, Trang Le, Chuan Hong, Xuan Wang, Zahra Shakeri"
-date: "11/01/2022"
+date: "04/11/2023"
 output:
   html_document:
     toc: true
@@ -28,7 +28,7 @@ source("R/demo_tables.R")
 source("R/utils.R")
 ```
 
-# Import Data from each Healthcare system
+# **Import Data from each Healthcare system**
 
 ```{r message=FALSE, warning=FALSE}
 # read in files from results folder 
@@ -67,19 +67,16 @@ sites_wo_race <- site_params %>%
 # combine all rda files with 'results' in name
 results <- mget(ls(pattern = "results"))
 
-## comorbidity and meta-data
+## load in the pre-processed comorbidity and meta-data
 load("processed/comorbidity_table_cnps.rda")
 load("processed/neuro_pt_counts.rda") 
 ```
 
-
-# Demographics
-
-## Pre-processing
+# **Pre-processing**
 
 **1. Format primary demographic characteristics**
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 # create list of hospitals for adult and pediatric analyses
 adult_sites = sorted_sites[!sorted_sites %in% c("BCH_results", "GOSH_results")]
 
@@ -95,7 +92,7 @@ demo_table_combine <- rbind(demo_table_adult, demo_table_pediatric)
 **2. Format clinical characteristics (i.e: continuous variables such as median time to discharge)**
 
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 clinical_table_adult <- create_clinical_tableone(sorted_sites = adult_sites, is_pediatric = FALSE)
 
 clinical_table_pediatric <- create_clinical_tableone(sorted_sites = pediatric_sites, is_pediatric = TRUE)
@@ -106,7 +103,7 @@ clinical_table_combine <- rbind(clinical_table_adult, clinical_table_pediatric)
 
 **3. Conduct additional pre-processing of clinical variables**
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 clinical_table_adult_clean <- clean_clinical_tables(clinical_table = clinical_table_adult)
 
 clinical_table_pediatric_clean <- clean_clinical_tables(clinical_table = clinical_table_pediatric)
@@ -131,9 +128,16 @@ top_comorb_adults <- comorbidity_table_adults$Comorbidity
 top_comorb_pediatrics <- comorbidity_table_pediatric$Comorbidity
 ```
 
-## Table One - Adults
+# **Demographics**
+
+## Table One - Combined
 
 ```{r}
+neuro_pt_counts_sum <- colSums(neuro_pt_counts[,-1]) %>% 
+  data.frame() %>% 
+  t() %>% 
+  data.frame()
+
 # specify the order of Table 1
 row_order_adult <- c(
   "All Patients", "Female", "Male", "Unknown Sex",
@@ -157,6 +161,48 @@ row_order_adult <- c(
   "Median number of readmissions  (sd) "
   )
 
+
+tableone_combine <- create_tableone(demo_table = demo_table_combine,
+                                    clinical_table = clinical_table_clean_combine) %>%
+  rbind(., comorb_table_wide %>%
+          group_by(Comorbidity) %>%
+          mutate(Comorb_Total = sum(Comorb_Total, na.rm = TRUE),
+          None_sum = sum(None_Total, na.rm = TRUE),
+          CNS_sum = sum(CNS_Total, na.rm = TRUE),
+          PNS_sum = sum(PNS_Total, na.rm = TRUE),
+          None_perc = round(None_sum/neuro_pt_counts_sum$None_n*100,1),
+          Central_perc = round(CNS_sum/neuro_pt_counts_sum$CNS_n*100,1),
+          Peripheral_perc = round(PNS_sum/neuro_pt_counts_sum$PNS_n*100,1),
+          None = paste(None_sum, "(", None_perc, ")"),
+          Central = paste(CNS_sum, "(", Central_perc, ")"),
+          Peripheral = paste(PNS_sum, "(", Peripheral_perc, ")")) %>%
+          distinct(Comorbidity, Comorb_Total, None, Central, Peripheral) %>%
+          rename(`Table 1` = "Comorbidity",
+          N = "Comorb_Total")) %>%
+  slice(match(row_order_adult, `Table 1`))
+
+kbl(tableone_combine %>%
+      rename("No Neurological Condition (NNC)" = None)) %>%
+      add_header_above(c(
+      " ",
+      "Total Patients" = 1,
+      "Neurological Disease" = 3
+      )) %>%
+      kable_paper("striped", full_width = F) %>%
+      pack_rows("Sex", 2, 4) %>%
+      pack_rows("Age", 5, 13) %>%
+      pack_rows("Race & Ethnicity", 14, 20) %>%
+      pack_rows("Past Medical History", 21, 27) %>%
+      pack_rows("Severity", 28, 30) %>%
+      pack_rows("Survival", 31, 33) %>%
+      pack_rows("Discharge", 34, 36) %>%
+      pack_rows("Readmission", 37, 40)
+write.csv(tableone_combine, 'tables/table1.csv', row.names = FALSE)
+```
+
+## Table One - Adults
+
+```{r}
 tableone_adult <- create_tableone(demo_table = demo_table_adult,
                                   clinical_table = clinical_table_adult_clean) %>%
                                   rbind(., comorbidity_table_adults %>%
@@ -241,68 +287,23 @@ kbl(tableone_pediatric %>%
   pack_rows("Readmission", 32, 35)
 ```
 
-## Table One - Combined
+**Sample Size**
 
-```{r}
-# need to add total comorbidity counts among adult and pediatric patients in order to properly calculate percents for the combined table
-neuro_pt_counts_sum <- colSums(neuro_pt_counts[,-1]) %>% 
-  data.frame() %>% 
-  t() %>% 
-  data.frame()
-
-tableone_combine <- create_tableone(demo_table = demo_table_combine,
-                                    clinical_table = clinical_table_clean_combine) %>%
-  rbind(., comorb_table_wide %>%
-          group_by(Comorbidity) %>%
-          mutate(Comorb_Total = sum(Comorb_Total, na.rm = TRUE),
-          None_sum = sum(None_Total, na.rm = TRUE),
-          CNS_sum = sum(CNS_Total, na.rm = TRUE),
-          PNS_sum = sum(PNS_Total, na.rm = TRUE),
-          None_perc = round(None_sum/neuro_pt_counts_sum$None_n*100,1),
-          Central_perc = round(CNS_sum/neuro_pt_counts_sum$CNS_n*100,1),
-          Peripheral_perc = round(PNS_sum/neuro_pt_counts_sum$PNS_n*100,1),
-          None = paste(None_sum, "(", None_perc, ")"),
-          Central = paste(CNS_sum, "(", Central_perc, ")"),
-          Peripheral = paste(PNS_sum, "(", Peripheral_perc, ")")) %>%
-          distinct(Comorbidity, Comorb_Total, None, Central, Peripheral) %>%
-          rename(`Table 1` = "Comorbidity",
-          N = "Comorb_Total")) %>%
-  slice(match(row_order_adult, `Table 1`))
-
-kbl(tableone_combine %>%
-      rename("No Neurological Condition (NNC)" = None)) %>%
-      add_header_above(c(
-      " ",
-      "Total Patients" = 1,
-      "Neurological Disease" = 3
-      )) %>%
-      kable_paper("striped", full_width = F) %>%
-      pack_rows("Sex", 2, 4) %>%
-      pack_rows("Age", 5, 13) %>%
-      pack_rows("Race & Ethnicity", 14, 20) %>%
-      pack_rows("Past Medical History", 21, 27) %>%
-      pack_rows("Severity", 28, 30) %>%
-      pack_rows("Survival", 31, 33) %>%
-      pack_rows("Discharge", 34, 36) %>%
-      pack_rows("Readmission", 37, 40)
-write.csv(tableone_combine, 'tables/table1.csv', row.names = FALSE)
-```
-
-### Sample Size
-
-```{r}
+```{r message=FALSE, warning=FALSE}
 n_adult <- as.numeric(tableone_adult$N)[1]
 n_pediatric <- as.numeric(tableone_pediatric$N)[1]
 ```
 
-### Evaluate characteristics among neuro status groups
+# **Demographic & Clinical Course Analysis**
+
+Evaluate characteristics among neuro status groups
 
 **1. Conduct chi-squared tests for categorical demographic variables**
 
 ```{r}
 compute_chi_square <- function(tableone, demo_table) {
   
-  N = tableone  %>% select(N) %>% head(1) %>% as.numeric()
+  N = tableone %>% select(N) %>% head(1) %>% as.numeric()
 
   # sum of all neuro condition groups
   cns_n = as.numeric(gsub( " .*$", "", tableone[1,"Central"]))
@@ -332,7 +333,6 @@ compute_chi_square <- function(tableone, demo_table) {
   
   # for each variable, we will run the chi.square test
   for(i in vars) {
-    
     test = calc_chisq(i, tableOne_sums, none_n, pns_n, cns_n)
     X2 <- round(test$statistic, 4)
     p_value <- test$p.value
@@ -357,6 +357,8 @@ compute_chi_square <- function(tableone, demo_table) {
   }
 ```
 
+**Combined Adult & Pediatric**
+
 ```{r}
 chisq_combine <- compute_chi_square(tableone = tableone_combine %>%
                                       filter(!`Table 1` == 'Discharged',
@@ -368,6 +370,31 @@ chisq_combine <- compute_chi_square(tableone = tableone_combine %>%
 datatable(chisq_combine %>% arrange(p_value))
 ```
 
+**Adult**
+
+```{r}
+chisq_adult <- compute_chi_square(tableone = tableone_adult %>%
+                                      filter(!`Table 1` == 'Discharged',
+                                             !`Table 1` == 'Not Discharged'),
+                                    demo_table = demo_table_adult %>%
+                                      filter(!variable == 'covid_discharged.discharged',
+                                             !variable == 'covid_discharged.not discharged'))
+
+datatable(chisq_adult %>% arrange(p_value))
+```
+
+**Pediatric**
+
+```{r}
+chisq_pediatric <- compute_chi_square(tableone = tableone_pediatric %>%
+                                      filter(!`Table 1` == 'Discharged',
+                                             !`Table 1` == 'Not Discharged'),
+                                    demo_table = demo_table_pediatric %>%
+                                      filter(!variable == 'covid_discharged.discharged',
+                                             !variable == 'covid_discharged.not discharged'))
+
+datatable(chisq_pediatric %>% arrange(p_value))
+```
 
 **2. Conduct anova (Kruskal-Wallis) tests for continuous clinical variables**
 
@@ -462,11 +489,30 @@ compute_kruskal <- function(clinical_table) {
   }
 ```
 
-### Adult & Pediatric Clinical Kruskall-Wallis
+**Adult & Pediatric Kruskall-Wallis**
 
-```{r}
+```{r message=FALSE, warning=FALSE}
+
 kw_combine <- compute_kruskal(clinical_table = clinical_table_combine)
 datatable(kw_combine %>% arrange(p_value))
+```
+
+**Adult Clinical Kruskall-Wallis**
+
+*Note: median CNS is 0 for all sites (reason for the NA values)*
+
+```{r message=FALSE, warning=FALSE}
+
+kw_adult <- compute_kruskal(clinical_table = clinical_table_adult)
+datatable(kw_adult %>% arrange(p_value))
+```
+
+**Pediatric Kruskall-Wallis**
+
+```{r message=FALSE, warning=FALSE}
+
+kw_pediatric <- compute_kruskal(clinical_table = clinical_table_pediatric)
+datatable(kw_pediatric %>% arrange(p_value))
 ```
 
 **3. Combine chi-square and Kruskal-Wallis results**
@@ -507,7 +553,19 @@ tableone_stats <- function(chisq_results, anova_results, population) {
 
 ```{r}
 # define matrix for each comorbidity
-comorb_matrix <- function(comorbidity_table, comorbidity) {
+comorb_matrix <- function(comorbidity_table, comorbidity, population) {
+
+    if(population=='Combined') {
+      comorbidity_table = comorbidity_table
+    } else if (population=="Adult") {
+      comorbidity_table = comorbidity_table %>% 
+        filter(population == "Adult")
+    } else if (population=="Pediatric") {
+      comorbidity_table = comorbidity_table %>% 
+        filter(population == "Pediatric")
+    } else {
+      print('incorrect population specification')
+    }
   
   mat_comorb <- comorbidity_table %>%
     filter(Comorbidity == paste(comorbidity)) %>%
@@ -535,22 +593,61 @@ comorb_matrix <- function(comorbidity_table, comorbidity) {
   return(results_df)
 }
 
-comorbidity_chi_list <- list()
+## combined comorbidities
+comorbidity_combined_chi_list <- list()
 
 for(i in top_comorb_adults) {
   
-  comorb_chi_results <- comorb_matrix(comorbidity_table = comorb_table_wide, i)
-  comorbidity_chi_list[[i]] <- comorb_chi_results
+  comorb_chi_results <- comorb_matrix(comorbidity_table = comorb_table_wide, i, population = "Combined")
+  comorbidity_combined_chi_list[[i]] <- comorb_chi_results
 }
 
-comorbidity_chi <- comorbidity_chi_list %>%
+comorbidity_combined_chi <- comorbidity_combined_chi_list %>%
   bind_rows() 
 
 chisq_combine_comorb <- chisq_combine %>%
   mutate(X2 = as.numeric(X2),
   df = as.numeric(df)) %>%
-  bind_rows(comorbidity_chi) 
+  bind_rows(comorbidity_combined_chi) 
+
+
+
+## adult comorbidities
+comorbidity_adult_chi_list <- list()
+
+for(i in top_comorb_adults) {
+  
+  comorb_chi_results <- comorb_matrix(comorbidity_table = comorb_table_wide, i, population = "Adult")
+  comorbidity_adult_chi_list[[i]] <- comorb_chi_results
+}
+
+comorbidity_adult_chi <- comorbidity_adult_chi_list %>%
+  bind_rows() 
+
+chisq_adult_comorb <- chisq_adult %>%
+  mutate(X2 = as.numeric(X2),
+  df = as.numeric(df)) %>%
+  bind_rows(comorbidity_adult_chi) 
+
+## pediatric comorbidities
+comorbidity_pediatric_chi_list <- list()
+
+for(i in top_comorb_pediatrics) {
+  
+  comorb_chi_results <- comorb_matrix(comorbidity_table = comorb_table_wide, i, population = "Pediatric")
+  comorbidity_pediatric_chi_list[[i]] <- comorb_chi_results
+}
+
+comorbidity_pediatric_chi <- comorbidity_pediatric_chi_list %>%
+  bind_rows() 
+
+chisq_pediatric_comorb <- chisq_pediatric %>%
+  mutate(X2 = as.numeric(X2),
+  df = as.numeric(df)) %>%
+  bind_rows(comorbidity_pediatric_chi_list) 
 ```
+
+## Table One - Combined Analysis
 
 ```{r}
 combine_tableone_stats <- tableone_stats(chisq_results = chisq_combine_comorb,
@@ -562,7 +659,29 @@ datatable(combine_tableone_stats)
 ```
 
 
-## Diagnoses
+## Table One - Adult Analysis
+
+```{r}
+adult_tableone_stats <- tableone_stats(chisq_results = chisq_adult_comorb,
+                                         anova_results = kw_adult,
+                                         population = "adult") 
+  
+
+datatable(adult_tableone_stats)
+```
+
+## Table One - Pediatric Analysis
+
+```{r}
+pediatric_tableone_stats <- tableone_stats(chisq_results = chisq_pediatric_comorb,
+                                         anova_results = kw_pediatric,
+                                         population = "pediatric") 
+  
+
+datatable(pediatric_tableone_stats)
+```
+
+# **Neurological Diagnosis Analysis**
 
 Evaluate CNS and PNS neurological diagnoses in our patient cohort
 
@@ -737,7 +856,8 @@ compute_stratified_neuro_counts <- function(tableone, sorted_sites, is_pediatric
            variable = gsub("covid_discharged", "", variable),
            variable = if_else(variable == ".TRUE", "Readmitted", variable)) %>% 
     left_join(., icds %>% rename(code = "icd"), by = "code") %>% 
-    ungroup()
+    ungroup() %>% 
+    filter(!concept_type == "icd-9")
 
 
   # refactor neuro status
@@ -810,9 +930,10 @@ compute_stratified_neuro_counts_age <- function(stratified_neuro_counts, tableon
          #mutate(total_n = sum(total_n_var)) %>% 
          ungroup() %>% 
          left_join(., age_df, by = "variable") %>% 
-         mutate(perc = as.character(round(total_n_var/n_var*100,1)),
+         mutate(n_var = as.numeric(n_var),
+                perc = as.character(round(total_n_var/n_var*100,1)),
                 perc = if_else(perc < 0.1, '<0.1', perc),
-                perc = paste0(perc, "%"))
+                perc = paste0(perc, "%")) 
   
   return(stratified_neuro_counts)
   
@@ -830,7 +951,7 @@ stratified_neuro_counts_age_pediatric <- compute_stratified_neuro_counts_age(str
                                                                  tableone = tableone_pediatric)
 ```
 
-**Diagnoses by Adult & < 18**
+**Diagnoses by Adult and Pediatric Populations**
 
 ```{r fig.height=20, fig.width=15}
 n_0_2 <- get_table_n(tableone_combine, var = "0-2")
@@ -838,7 +959,7 @@ n_0_2 <- get_table_n(tableone_combine, var = "0-2")
 n_6_11 <- get_table_n(tableone_combine, var = "6-11")
 n_12_17 <- get_table_n(tableone_combine, var = "12-17")
 
-total_ped_age_count = n_0_2 +  n_6_11 + n_12_17
+total_ped_age_count = as.numeric(n_0_2) +  as.numeric(n_6_11) + as.numeric(n_12_17)
 
 stratified_neuro_counts_age_pediatric_reformat = stratified_neuro_counts_age_pediatric %>%
   select(variable, pns_cns, description, n_var, total_n_var) %>%
@@ -862,7 +983,7 @@ stratified_neuro_counts_age_combined$variable <- factor(stratified_neuro_counts_
                                                                       levels=c("0-17 Years", "18-25 Years", "26-49 Years", "50-69 Years", "70-79 Years", "80+ Years"))
 ```
 
-```{r}
+```{r fig.height=20, fig.width=12}
 group.colors <- c(NNC = "gray", PNS = "slateblue", CNS ="tomato")
 
 adult_ped_combined_plot <- ggplot(stratified_neuro_counts_age_combined,
@@ -876,8 +997,8 @@ adult_ped_combined_plot <- ggplot(stratified_neuro_counts_age_combined,
     #hjust="inward",
     size = 6,
     inherit.aes = TRUE) +
-  scale_x_continuous(expand = expansion(mult = c(0,0.2))) + 
-  facet_grid(pns_cns ~ variable, scales = "free") + 
+  scale_x_continuous(expand = expansion(mult = c(0,0.2))) + # to ensure percent labels are within the figure
+  facet_grid(pns_cns ~ variable, scales = "free", space = "free_y") + 
   scale_y_discrete("", position="left", labels = function(x) str_wrap(x, width = 100)) +   
   scale_fill_manual(values = group.colors) +
   xlab("Number of Patients") +
@@ -891,9 +1012,11 @@ adult_ped_combined_plot <- ggplot(stratified_neuro_counts_age_combined,
 ggsave("figures/Fig3_diagnoses_by_age_adult_ped_18group.png", adult_ped_combined_plot, width = 40, height = 19, dpi = 300)
 ```
 
+![](figures/Fig3_diagnoses_by_age_adult_ped_18group.png){#id .class width=1000 height=800px}
+
 ## Evaluate Diagnoses by Outcome
 
-```{r fig.height=9, fig.width=12}
+```{r}
 
 stratified_neuro_counts_adult$population = "adult"
 stratified_neuro_counts_pediatric$population = "pediatric"
@@ -901,11 +1024,11 @@ stratified_neuro_counts_pediatric$population = "pediatric"
 stratified_neuro_counts_combine <- rbind(stratified_neuro_counts_adult, stratified_neuro_counts_pediatric)
 
 ## determine total number of patients who died or severe
-n_death_adult = get_table_n(df = tableone_adult, var = "Deceased")
-n_severe_adult = get_table_n(df = tableone_adult, var = "Severe")
+n_death_adult = get_table_n(df = tableone_adult, var = "Deceased") %>% as.numeric()
+n_severe_adult = get_table_n(df = tableone_adult, var = "Severe") %>% as.numeric()
 
-n_death_pediatric = get_table_n(df = tableone_pediatric, var = "Deceased")
-n_severe_pediatric = get_table_n(df = tableone_pediatric, var = "Severe")
+n_death_pediatric = get_table_n(df = tableone_pediatric, var = "Deceased") %>% as.numeric()
+n_severe_pediatric = get_table_n(df = tableone_pediatric, var = "Severe") %>% as.numeric()
 
 stratified_neuro_counts_outcomes <- stratified_neuro_counts_combine %>% 
   filter(variable %in% c("Severe", "Deceased"),
@@ -920,7 +1043,8 @@ stratified_neuro_counts_outcomes <- stratified_neuro_counts_combine %>%
                                  variable == "Deceased" & population == "adult" ~ round(total_n_var/n_death_adult*100,1),
                                  variable == "Severe" & population == "pediatric" ~ round(total_n_var/n_severe_pediatric*100,1),
                                  variable == "Deceased" & population == "pediatric" ~ round(total_n_var/n_death_pediatric*100,1)),
-                perc = paste0(perc,"%")) %>% 
+         perc = if_else(perc < 0.1, '<0.1', as.character(perc)),
+       perc = paste0(perc, "%")) %>% 
   select(-code, -concept_type) %>% 
   distinct()
 ```
@@ -940,7 +1064,7 @@ adult_outcomes = ggplot(stratified_neuro_counts_outcomes %>%
     size = 5,
     inherit.aes = TRUE) +
   scale_x_continuous(expand = expansion(mult = c(0,0.2))) + 
-  facet_grid(pns_cns ~ variable, scales = "free") + 
+  facet_grid(pns_cns ~ variable, scales = "free", space = "free_y") + 
   scale_y_discrete("", position="left", labels = function(x) str_wrap(x, width = 100)) +   
   scale_fill_manual(values = group.colors) +
   xlab("Number of Patients") + 
@@ -984,12 +1108,13 @@ ggsave("figures/SuppFig1_diagnoses_by_outcomes_pediatric.png", pediatric_outcome
 ```
 
 
-```{r}
-grid.arrange(pediatric_outcomes, adult_outcomes, ncol=1)
+```{r eval=FALSE, include=TRUE}
+#grid.arrange(pediatric_outcomes, adult_outcomes, ncol=1)
 
 ggsave("figures/SuppFig1_diagnoses_by_outcome_combined.png", grid.arrange(pediatric_outcomes, adult_outcomes, ncol=1), width = 25, height = 25, dpi = 300)
 ```
 
+![](figures/SuppFig1_diagnoses_by_outcome_combined.png){#id .class width=800 height=800px}
 
 ## Evaluate patients with "Both" CNS and PNS diseases
 
@@ -1008,12 +1133,39 @@ for (i in sorted_sites) {
 
 both_counts <- bind_rows(both_counts_list) %>% t() %>% data.frame() %>% sum()
 
-print(paste(both_counts, "(", round(both_counts/(tableone_combine$N[1]+both_counts)*100,2), "%)")) 
+print(paste(both_counts, "(", round(both_counts/(as.numeric(tableone_combine$N[1])+both_counts)*100,2), "%)")) 
 ```
 
-## Comorbidities
+# **Comorbidity Analysis**
 
-Create vector counts of patients with comorbidity data 
+Create comorbidity count table
+
+```{r}
+comorbidity_table_adult <- comorb_table_wide %>%
+  select(Comorbidity, population, Comorb_Total, `NNC_N_%`, `CNS_N_%`, `PNS_N_%`) %>%
+  filter(population == "Adult") %>% 
+  rename(N = "Comorb_Total",
+         NNC = "NNC_N_%",
+         CNS = "CNS_N_%",
+         PNS = "PNS_N_%") %>% 
+  mutate(N = paste0(N, " (", round(N/n_adult, 2)*100, "%)"))
+
+comorbidity_table_pediatric <- comorb_table_wide %>%
+  select(Comorbidity, population, Comorb_Total, `NNC_N_%`, `CNS_N_%`, `PNS_N_%`) %>%
+  filter(population == "Pediatric") %>% 
+  rename(N = "Comorb_Total",
+         NNC = "NNC_N_%",
+         CNS = "CNS_N_%",
+         PNS = "PNS_N_%") %>% 
+  mutate(N = paste0(N, " (", round(N/n_pediatric, 2)*100, "%)"))
+
+supp_comorbidity_table <- rbind(comorbidity_table_adult, comorbidity_table_pediatric) %>% 
+  arrange(Comorbidity)
+
+write.csv(supp_comorbidity_table, "tables/SuppTable_Comorbidity_Counts.csv", row.names = FALSE)
+```
+
+**Create vector counts of patients with comorbidity data**
 
 ```{r}
 neuro_pt_counts_sum_adult <- neuro_pt_counts %>% 
@@ -1032,7 +1184,6 @@ none_n_pediatric = neuro_pt_counts_sum_pediatric$None_n
 cns_n_pediatric = neuro_pt_counts_sum_pediatric$CNS_n
 pns_n_pediatric = neuro_pt_counts_sum_pediatric$PNS_n
 ```
-
 
 ### Calculate Relative Risk (RR)
 
@@ -1186,7 +1337,7 @@ calculate_rr <- function(is_pediatric = FALSE) {
                          limits = c(0,4)) +
     ylab("") +
     xlab("Relative Risk") +
-    ggtitle("A. CNS Patients") + 
+    ggtitle("CNS Patients") + 
     theme(axis.text.y = element_text(face = "bold"))
   
   # arrange by top PNS results
@@ -1208,7 +1359,7 @@ calculate_rr <- function(is_pediatric = FALSE) {
                          limits = c(0,1.5)) +
     ylab("") +
     xlab("Relative Risk") +
-    ggtitle("B. PNS Patients") + 
+    ggtitle("PNS Patients") + 
     theme(axis.text.y = element_text(face = "bold"))
   
   pns_rr_plot <- set_panel_size(pns_rr_plot,
@@ -1219,17 +1370,19 @@ calculate_rr <- function(is_pediatric = FALSE) {
                             width  = unit(7, "cm"),
                             height = unit(6.5, "in"))
   
-  grid.arrange(cns_rr_plot, pns_rr_plot, ncol=2)
+  #grid.arrange(cns_rr_plot, pns_rr_plot, ncol=2)
   
   ggsave(paste0("figures/Figure4.relative_risk_", pop, ".png"), grid.arrange(cns_rr_plot, pns_rr_plot, ncol=2), width = 15, height = 8, dpi = 300)
   
   }
 ```
 
-```{r}
+```{r eval=TRUE, include=FALSE}
 rr_adult <- calculate_rr(is_pediatric = FALSE)
 #rr_pediatric <- calculate_rr(is_pediatric = TRUE)
 ```
+
+![](figures/Figure4.relative_risk_Adult.png){#id .class width=1000 height=800px}
 
 
 ### LPCA deviance explained
@@ -1284,7 +1437,7 @@ pca_plot <- ggplot(pca_data,
        aes(x = fct_reorder(site, -dev_expl), y = dev_expl, group = 1)) +
   geom_point(size = 2.5) +
   geom_line() +
-  xlab("") + 
+  xlab("Healthcare System") + 
   ylab("Proportion of Deviance explained") +  
   ylim(0,1) + 
   theme(axis.text.x=element_text(angle=90, hjust=1, face = "bold", size = 12),
@@ -1293,7 +1446,3 @@ pca_plot <- ggplot(pca_data,
 
 ggsave("figures/SuppFig_pca_deviance.png", pca_plot, height = 6, width = 6)
 ```
-
-
-
-

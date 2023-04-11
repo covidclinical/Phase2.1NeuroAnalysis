@@ -8,7 +8,7 @@ forester <- function (left_side_data, estimate, ci_low, ci_high, right_side_data
           xbreaks = NULL, nudge_y = 0, nudge_x = 1, arrows = FALSE,
           arrow_labels = c("Lower", "Higher"), add_plot = NULL, add_plot_width = 1,
           add_plot_gap = FALSE, point_sizes = 3, point_shapes = 16,
-          center_ggplot = NULL, scale_break = NULL, scale_to_break = NULL, set_png_height = NULL)
+          center_ggplot = NULL, set_png_height = NULL)
 {
   theme <- gridExtra::ttheme_minimal(core = list(fg_params = list(hjust = 0,
                                                                   x = 0.05, fontfamily = font_family,
@@ -212,11 +212,6 @@ forester <- function (left_side_data, estimate, ci_low, ci_high, right_side_data
       center <- center + ggplot2::scale_x_log10(labels = scales::number_format(accuracy = 0.1),
                                                 breaks = xbreaks, expand = c(0, 0))
     }
-  }
-
-  if (scale_break == TRUE) {
-
-    center <- center + ggbreak::scale_x_break(scale_to_break, scales=0.3)
   }
 
   if (!is.null(center_ggplot)) {

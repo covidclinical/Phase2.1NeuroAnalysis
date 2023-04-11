@@ -7,10 +7,6 @@ output: html_document
 
 Generate survival curves
 
-```{r}
-setwd("C:/Users/User/Box Sync/Projects/nu4ce/neuro/Phase2.1NeuroRSummaries/analysis_v2")
-```
-
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
 library(metafor)
@@ -56,6 +52,9 @@ sites_wo_race <- site_params %>%
 
 # combine all rda files with 'results' in name
 results <- mget(ls(pattern = "results"))
+
+## read in pt counts
+pt_counts_df <- read.csv('tables/site_pt_counts.csv')
 ```
 
 ## Define outcomes
@@ -68,15 +67,40 @@ outcomes <-
   )
 ```
 
-## Exclusion of sites
+
+## Identify sites to include in the analysis
+
+We will only include a site if they have >= 3 neuro patients
 
 ```{r}
-results[["BCH_results"]] <- NULL
-results[["GOSH_results"]] <- NULL
-results[["NUH_results"]] <- NULL
-results[["UKFR_results"]] <- NULL
-```
+## adults
+sites_adult <- pt_counts_df %>% 
+  filter(population == "Adult") %>% 
+  mutate(neuro_sum = n_var_Central + n_var_Peripheral) %>% 
+  filter(!neuro_sum < 3) %>% 
+  distinct(site) %>% 
+  mutate(site = gsub("_results", "", site))
 
+sites_adult_results <- sites_adult %>% 
+  mutate(site = paste0(site, "_results")) %>% 
+  as.vector()
+
+adult_results <- results[grepl(paste(sites_adult_results$site, collapse = "|"), names(results))]
+
+## pediatrics
+sites_pediatric <- pt_counts_df %>% 
+  filter(population == "Pediatric") %>% 
+  mutate(neuro_sum = n_var_Central + n_var_Peripheral) %>% 
+  filter(!neuro_sum < 3) %>% 
+  distinct(site) %>% 
+  mutate(site = gsub("_results", "", site))
+
+sites_pediatric_results <- sites_pediatric %>% 
+  mutate(site = paste0(site, "_results")) %>% 
+  as.vector()
+
+pediatric_results <- results[grepl(paste(sites_pediatric_results$site, collapse = "|"), names(results))]
+```
 
 ## Get Cox model results - Adults
 
@@ -85,7 +109,7 @@ cox_results_adults <- list()
 
 for (outcome_i in outcomes) {
   cox_results_adults[[outcome_i]] <-
-    results %>%
+    adult_results %>%
     lapply(get_cox_row, population = "adults", comorb_method = "ind", censor_cutoff = "90", outcome = outcome_i) %>%
     bind_rows() %>%
     mutate(outcome = outcome_i)
@@ -95,13 +119,11 @@ for (outcome_i in outcomes) {
 ## Get adjusted KM results - Adults
 
 ```{r}
-## Get Cox model results - Adults
-
 km_results_adults <- list()
 
 for (outcome_i in outcomes) {
   km_results_adults[[outcome_i]] <-
-    results %>% 
+    adult_results %>% 
     lapply(get_km_row, population = "adults", comorb_method = "ind", censor_cutoff = "90", outcome = outcome_i) %>%
     bind_rows() %>%
     mutate(outcome = outcome_i)
@@ -110,70 +132,97 @@ for (outcome_i in outcomes) {
 
 ```{r}
 res_dat_surv <- bind_rows(km_results_adults) %>%
-  # cbind(., res_dat[c("time", "site", "outcome")]) %>% 
-  # pivot_longer(cols = None:CNS,  names_to = "strata", values_to = "surv") %>% 
-  # left_join(., res_dat_std.err) %>%
-  # left_join(., res_dat_lower) %>% 
-  # left_join(., res_dat_upper) %>% 
-  # mutate(std.err = ifelse(is.nan(std.err), NA, std.err)) %>%
-  # filter(!time < 0) %>% 
   add_count(site, strata, outcome, name = "n_timepoints") %>%
+  # add rows to fill in missing time points (this ensures all sites will have up to the censor date)
   complete(time, site, nesting(strata, outcome)) %>%
-  #mutate(surv = if_else(is.na(surv) & time == 0, 1, surv)) %>%
   group_by(site, strata, outcome) %>%
   arrange(time) %>% 
+  # carry down the survival and standard errors to fill in missing time periods
   fill(surv, .direction = "down") %>%
   fill(std.err.sqrt, n_timepoints, .direction = "down") %>%
   fill(std.err, n_timepoints, .direction = "down") %>%
-  #fill(lower, .direction = "down") %>%
-  #fill(upper, .direction = "down") %>%
-  #fill(std.err, n_site, n_timepoints, .direction = "downup") %>%
-  #filter(n_timepoints >= 5, time >= 0) %>%
-  ungroup()
+  ungroup() %>% 
+  mutate(
+    strata = toupper(strata),
+    strata = factor(strata,
+                    levels=c("NONE", "CNS", "PNS"),
+                    labels=c("NNC", "CNS", "PNS"))
+    )
 ```
 
-### Evaluate survival curves by site
+## Get adjusted KM results - Pediatrics
 
 ```{r}
-res_dat_surv$strata <- toupper(res_dat_surv$strata)
-res_dat_surv$strata <- as.factor(res_dat_surv$strata)
-res_dat_surv$strata <- fct_recode(res_dat_surv$strata, "NNC" = "NONE")
+km_results_pediatrics <- list()
 
-res_dat_surv$strata <- factor(res_dat_surv$strata, levels=c("NNC", "CNS", "PNS"), labels=c("NNC", "CNS", "PNS"))
+for (outcome_i in outcomes) {
+  km_results_pediatrics[[outcome_i]] <-
+    pediatric_results %>% 
+    lapply(get_km_row, population = "pediatrics", comorb_method = "ind", censor_cutoff = "90", outcome = outcome_i)
+ 
+  # remove any cases where a site may not have any patients for a specific outcome
+  km_results_pediatrics[[outcome_i]] = km_results_pediatrics[[outcome_i]][!sapply(km_results_pediatrics[[outcome_i]],is.null)] %>%
+    bind_rows() %>%
+    mutate(outcome = outcome_i)
+}
 
-#group.colors <- c(NNC = "darkgray", PNS = "slateblue", CNS ="tomato")
-group.colors <- c(NNC = "darkgray", PNS = "slateblue", CNS ="tomato")
+res_dat_surv_ped <- bind_rows(km_results_pediatrics) %>%
+  add_count(site, strata, outcome, name = "n_timepoints") %>%
+  # add rows to fill in missing time points (this ensures all sites will have up to the censor date)
+  complete(time, site, nesting(strata, outcome)) %>%
+  group_by(site, strata, outcome) %>%
+  arrange(time) %>% 
+  # carry down the survival and standard errors to fill in missing time periods
+  fill(surv, .direction = "down") %>%
+  fill(std.err.sqrt, n_timepoints, .direction = "down") %>%
+  fill(std.err, n_timepoints, .direction = "down") %>%
+  ungroup() %>% 
+  mutate(
+    strata = toupper(strata),
+    strata = factor(strata,
+                    levels=c("NONE", "CNS", "PNS"),
+                    labels=c("NNC", "CNS", "PNS"))
+    )
+```
 
-site_names <- names(results) %>% 
-  gsub("_results", "", .)
+### Set survival plot params
 
+```{r}
 # calculate CIs
 zval <- qnorm(1- (1-0.95)/2, 0, 1)
 standard_error <- function(x) sd(x, na.rm = TRUE) / sqrt(length(x)) # Create own function
+
+# set plot colors
+group.colors <- c(NNC = "#BBBBBC", PNS = "slateblue", CNS ="tomato")
 ```
 
+
+### Evaluate survival curves by site - Adults
+
+**not many pediatric deaths - will only plot discharge**
+
 ```{r}
-pdf(file="figures/site_level_survival_curves.pdf", height = 5, width = 6)  
+site_names <- names(adult_results) %>% 
+  gsub("_results", "", .)
+
+pdf(file="figures/site_level_survival_curves_log-log.pdf", height = 5, width = 6)  
 
 for(i in site_names) {
   
   plot <- res_dat_surv %>%
     mutate(outcome = factor(outcome, levels = outcomes) %>%
              fct_recode(
-               "Mortality" = "time_deceased_reg_elix",
+               "Mortality" = "deceased_reg_elix",
                "Discharge" = "time_first_discharge_reg_elix"
              )) %>% 
     filter(site == i) %>% 
-     group_by(outcome, strata) %>%
-     mutate(
-       ci_lower = surv - zval*std.err.sqrt, 
-       ci_upper = surv + zval*std.err.sqrt) %>% 
-       #lt_hat = log(-log(surv)),
-       #se_lt_hat = standard_error(lt_hat)) %>%
-     ungroup() %>%
-     # mutate(ci_lower = exp(-exp(log(-log(surv)) + zval*se_lt_hat)),
-     #        ci_upper = exp(-exp(log(-log(surv)) - zval*se_lt_hat))) %>%
-    # filter(time <= 60) %>% 
+    mutate(
+      ## log-log
+      se_H <- std.err,
+      se_log_log_S <- se_H / log(surv),
+      ci_lower = exp(-exp(log(-log(surv)) - se_log_log_S * qnorm(.975))),
+      ci_upper = exp(-exp(log(-log(surv)) + se_log_log_S * qnorm(.975)))
+    ) %>% 
     ggplot(aes(
     x = time, y = surv,
     color = strata,
@@ -188,38 +237,99 @@ for(i in site_names) {
   coord_cartesian(clip = "off", ylim = c(0, 1), expand = FALSE) +
   xlab("Time (days)") + 
   ylab("Event Probability") +
+  scale_x_continuous(limits = c(1, 90), breaks = c(1, 30, 60, 90)) +
   theme_classic() + 
   labs(color = "Neuro Status",
        fill = "") + 
-  theme(legend.position="top")
+  theme(legend.position="top",
+        strip.text = element_text(color = "black", size = 12))
   
   print(plot + ggtitle(paste(i)) + 
-           theme(plot.title = element_text(hjust = 0.5)))
-  
-  
+           theme(plot.title = element_text(hjust = 0.5),
+                 panel.spacing = unit(15, "pt")))
 }
 
 dev.off()
 
 ```
 
+**not many pediatric deaths - will only plot discharge**
+
+```{r}
+site_names_peds <- names(pediatric_results) %>% 
+  gsub("_results", "", .)
+
+#pdf(file="figures/site_level_survival_curves_pediatrics.pdf", height = 5, width = 6)  
+
+#for(i in site_names_peds) {
+  
+  plot <- res_dat_surv_ped %>%
+    mutate(outcome = factor(outcome, levels = outcomes) %>%
+             fct_recode(
+               "Mortality" = "deceased_reg_elix",
+               "Discharge" = "time_first_discharge_reg_elix"
+             )) %>% 
+    filter(#site == i,
+           # deaths are so few among all the sites - thus, will only plot discharge
+           outcome == "Discharge") %>% 
+    #group_by(strata) %>%
+    # mutate(
+    #   # se_log_log_S 
+    #   std.error = std.err / log(surv), 
+    #   ci_lower = exp(-exp(log(-log(surv)) - se_log_log_S * qnorm(.975))),
+    #   ci_upper = exp(-exp(log(-log(surv)) + se_log_log_S * qnorm(.975)))
+    # ) %>% 
+    ggplot(aes(
+    x = time, y = surv,
+    color = strata,
+    fill = strata,
+    group_by = site
+  )) +
+  geom_line(aes()) +
+  #geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = strata), alpha = 0.2, linetype = 0, show.legend = FALSE) + 
+  labs(color = NULL, y = NULL) +
+  scale_colour_manual(values = group.colors) + 
+  scale_fill_manual(values = group.colors) + 
+  facet_wrap(~site, ncol = 3, scales = "free") +
+  coord_cartesian(clip = "off", ylim = c(0, 1), expand = FALSE) +
+  xlab("Time (days)") + 
+  ylab("Event Probability") +
+  scale_x_continuous(limits = c(1, 90), breaks = c(0, 30, 60, 90)) +
+  theme_classic() + 
+  labs(color = "Neurological Condition",
+       fill = "") + 
+  theme(legend.position="top",
+        strip.text = element_text(color = "black", size = 12))
+  
+  print(plot + ggtitle(paste(i)) + 
+           theme(plot.title = element_text(hjust = 0.5),
+                 panel.spacing = unit(15, "pt")))
+#}
+
+#dev.off()
+
+```
+
+
 ### Weight each site 
 
 Here we will weight each site by the inverse of its variance calculated from the CNS and PNS meta-analysis models. We will take the average of the CNS and PNS weights
 
 ```{r}
-#load("survival_model/adults_lpca_60_CNS.rda")
-#load("survival_model/adults_lpca_60_PNS.rda")
+load("survival_model/adults_deceased_reg_elix_ind_90_CNS.rda")
+load("survival_model/adults_deceased_reg_elix_ind_90_PNS.rda")
 
-load("survival_model/adults_ind_90_CNS.rda")
-load("survival_model/adults_ind_90_PNS.rda")
+load("survival_model/adults_time_first_discharge_reg_elix_ind_90_CNS.rda")
+load("survival_model/adults_time_first_discharge_reg_elix_ind_90_PNS.rda")
 
 # rename weight column
-cns_weights <- adults_ind_90_CNS %>% 
+cns_weights <- adults_deceased_reg_elix_ind_90_CNS %>% 
+  rbind(., adults_time_first_discharge_reg_elix_ind_90_CNS) %>% 
   rename("cns_weight" = Weight.random) %>% 
   select(-strata)
 
-pns_weights <- adults_ind_90_PNS %>% 
+pns_weights <- adults_deceased_reg_elix_ind_90_PNS %>% 
+  rbind(., adults_time_first_discharge_reg_elix_ind_90_PNS) %>% 
   rename("pns_weight" = Weight.random) %>% 
   select(-strata) 
 
@@ -231,19 +341,33 @@ avg_weights <- cns_weights %>%
          avg_weight = rowMeans(cbind(cns_weight, pns_weight), na.rm = TRUE)) %>% 
   rename("outcome" = analysis,
          "site" = studlab)
+
+meta_surv_df <- res_dat_surv %>%
+  left_join(., avg_weights, by = c("site", "outcome")) %>%
+  ungroup() %>%  
+  as.data.frame() %>%  
+  mutate(
+    outcome = factor(outcome, levels = outcomes) %>%
+      fct_recode(
+        "Mortality" = "deceased_reg_elix",
+        "Discharge" = "time_first_discharge_reg_elix"
+      )) %>% 
+  ungroup()
 ```
 
 ### Generate survival curves
 
+**Random effects meta analysis function**
+
 ```{r}
-#chuan's code
+# chuan's code
 
 ## y is the vector of beta coefficients; 
 ## s is the vector of SE of beta coefficients;
 ## wt is the weight (e.g, number of events, make sure it does not change over time)
 
 # Meg added the rule to handle cases when v.between is a negative number based on the following reference which explains: 
-#https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/heterogeneity.html
+# https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/heterogeneity.html
 # the value of I2 cannot be lower than 0%, so if Q happens to be smaller than K-1, we simply use 0 instead of a negative value.
 metaFUN.randomeffect=function(y, s, wt){
   mm=c(y%*%wt/sum(wt))
@@ -258,64 +382,117 @@ metaFUN.randomeffect=function(y, s, wt){
 }
   ww=1/(s^2+v.between) # random-effects weight
   ss=sqrt(1/sum(ww)) # sum of squares 
-  ## MH addition based o link above and discussion of T^2 approximating X^2 distribution## 
-  ci_low = qchisq(0.025, df=df)
-  ci_high = qchisq(0.975, df=df)
-  data.frame(pool_mean=mm, pool_se=ss, pool_low = ci_low, pool_high = ci_high)
+  ## MH addition based on link above and discussion of T^2 approximating X^2 distribution## 
+  #ci_low = qchisq(0.025, df=df)
+  #ci_high = qchisq(0.975, df=df)
+  data.frame(pool_mean=mm, pool_se=ss) #pool_high = ci_high, tau2=v.between, ww=ww)
 }
+```
 
-zval <- qnorm(1- (1-0.95)/2, 0, 1)
+**Testing CI interval estimation**
 
-meta_surv_df <- res_dat_surv %>%
-  left_join(., avg_weights, by = c("site", "outcome")) %>%
-  ungroup() %>%  
-  as.data.frame() %>% 
-  filter(!is.na(surv)) %>% 
-  #group_by(site, strata, outcome) %>% 
-  # mutate(lt_hat = log(-log(surv))) %>% 
-  # filter(!is.infinite(lt_hat)) %>% 
-  # mutate(se_lt_hat = standard_error(lt_hat)) %>% 
+```{r eval=FALSE, include=FALSE}
+
+## referenced: 
+# https://dominicmagirr.github.io/post/2022-01-18-be-careful-with-standard-errors-in-survival-survfit/
+# http://www-personal.umich.edu/~yili/lect2notes.pdf
+
+# log-log method
+meta_surv_ci_df <- meta_surv_df %>%
+  mutate(
+     lt_hat = log(-log(surv)),
+     se_lt_hat = std.err * lt_hat 
+     ) %>%
+  filter(!is.nan(se_lt_hat)) %>% # 3 surv probs for ICSM are generating as NaN values
   group_by(strata, outcome, time) %>%
   mutate(
-    outcome = factor(outcome, levels = outcomes) %>%
-      fct_recode(
-        "Mortality" = "deceased_reg_elix",
-        "Discharge" = "time_first_discharge_reg_elix"
-      ),
-    strata = str_replace(strata, "neuro_post=", ""),
-    surv = metaFUN.randomeffect(surv, std.err.sqrt, avg_weight)$pool_mean,
-    se = metaFUN.randomeffect(surv, std.err.sqrt, avg_weight)$pool_se,
-    ci_low = metaFUN.randomeffect(surv, std.err, avg_weight)$pool_low,
-    ci_high = metaFUN.randomeffect(surv, std.err, avg_weight)$pool_high,
-    ci_l = surv - se*zval,
-    ci_u = surv + se*zval) %>% 
+    m_surv = metaFUN.randomeffect(lt_hat, se_lt_hat, avg_weight)$pool_mean,
+    m_se = metaFUN.randomeffect(lt_hat, se_lt_hat, avg_weight)$pool_se,
+    ci_l = exp(-exp(m_surv + m_se * qnorm(.975))),
+    ci_u = exp(-exp(m_surv - m_se * qnorm(.975))),
+    m_surv = exp(-exp(m_surv))
+    ) %>% 
   ungroup() %>% 
-  # group_by(strata, outcome) %>% 
-  #   mutate(
-  #      lt_hat = log(-log(surv)),
-  #      se_lt_hat = standard_error(lt_hat),
-  #      ci_low = surv - se_lt_hat*zval,
-  #     ci_up = surv + se_lt_hat*zval) %>% 
-  distinct(outcome, strata, time, surv, se, ci_l, ci_u, ci_low, ci_high) 
+  distinct(outcome, strata, time, surv, m_surv, m_se, ci_l, ci_u) 
 
-# refactor
-meta_surv_df$strata <- as.factor(meta_surv_df$strata)
+#log
+meta_surv_ci_df <- meta_surv_df %>%
+  # mutate(
+  #    der_std.err = std.err*surv,
+  #    se_lt_hat = std.err / log(surv) # ## standard error of log(-log((S)) [by delta method]
+  #    ) %>%
+  # filter(!is.nan(se_lt_hat)) %>% # 3 surv probs for ICSM are generating as NaN values
+  group_by(strata, outcome, time) %>%
+  mutate(
+    m_surv = metaFUN.randomeffect(surv, std.err, avg_weight)$pool_mean,
+    m_se = metaFUN.randomeffect(surv, std.err, avg_weight)$pool_se,
+    ci_l = pmin(1, exp(log(m_surv) - m_se * qnorm(.975))),
+    ci_u = pmin(1, exp(log(m_surv) + m_se * qnorm(.975)))
+    ) %>% 
+  ungroup() %>% 
+  distinct(outcome, strata, time, surv, m_surv, m_se, ci_l, ci_u) 
 
-meta_surv_df$strata <- factor(meta_surv_df$strata, 
-                              levels=c("NNC", "CNS", "PNS"),
-                              labels=c("NNC", "CNS", "PNS"))
+# der_std.err
+meta_surv_ci_df <- meta_surv_df %>%
+  group_by(strata, outcome, time) %>%
+  mutate(
+    der_std.err = std.err*surv, # average std.err of the cumulative hazard * average surv probability
+    m_surv = metaFUN.randomeffect(surv, der_std.err, avg_weight)$pool_mean,
+    m_se = metaFUN.randomeffect(surv, der_std.err, avg_weight)$pool_se,
+    ci_l = m_surv - m_se*zval,
+    ci_u = m_surv + m_se*zval) %>% 
+  ungroup() %>% 
+  distinct(outcome, strata, time, m_surv, m_se, ci_l, ci_u)
 
-#group.colors <- c(NNC = "darkgray", PNS = "#d90429", CNS ="#ff9c8b") #survival_curves1.2
-group.colors <- c(NNC = "darkgray", PNS = "slateblue", CNS ="tomato") 
+# std.err.sqrt
+meta_surv_ci_df <- meta_surv_df %>%
+  group_by(strata, outcome, time) %>%
+  mutate(
+    m_surv = metaFUN.randomeffect(surv, std.err.sqrt, avg_weight)$pool_mean,
+    m_se = metaFUN.randomeffect(surv, std.err.sqrt, avg_weight)$pool_se,
+    ci_l = m_surv - m_se*zval,
+    ci_u = m_surv + m_se*zval) %>%
+  ungroup() %>% 
+  distinct(outcome, strata, time, surv, m_surv, m_se, ci_l, ci_u) 
 
-surv_curves <- meta_surv_df %>%
+# average std.err
+meta_surv_ci_df <- meta_surv_df %>%
+  group_by(strata, outcome, time) %>%
+  mutate(
+    m_surv = metaFUN.randomeffect(surv, std.err, avg_weight)$pool_mean,
+    m_se = metaFUN.randomeffect(surv, std.err, avg_weight)$pool_se,
+    ci_l = m_surv - m_se*zval,
+    ci_u = m_surv + m_se*zval) %>%
+  ungroup() %>% 
+  distinct(outcome, strata, time, surv, m_surv, m_se, ci_l, ci_u) 
+```
+
+
+```{r}
+meta_surv_ci_df <- meta_surv_df %>%
+  group_by(strata, outcome, time) %>%
+  mutate(
+    der_std.err = std.err*surv, # average std.err of the cumulative hazard * average surv probability
+    m_surv = metaFUN.randomeffect(surv, der_std.err, avg_weight)$pool_mean,
+    m_se = metaFUN.randomeffect(surv, der_std.err, avg_weight)$pool_se,
+    ci_l = m_surv - m_se*zval,
+    ci_u = m_surv + m_se*zval) %>% 
+  ungroup() %>% 
+  distinct(outcome, strata, time, m_surv, m_se, ci_l, ci_u)
+```
+
+
+**Generate survival curves**
+
+```{r}
+surv_curves <- meta_surv_ci_df %>%
   ggplot(aes(
-    x = time, y = surv,
+    x = time, y = m_surv,
     color = strata,
     fill = strata,
   )) +
   geom_line(aes()) +
-  geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = strata), alpha = 0.2, linetype = 0, show.legend = FALSE) + 
+  geom_ribbon(aes(ymin = ci_l, ymax = ci_u, fill = strata), alpha = 0.2, linetype = 0, show.legend = FALSE) + 
   labs(color = NULL, y = NULL) +
   scale_colour_manual(values = group.colors) + 
   scale_fill_manual(values = group.colors) + 
@@ -323,20 +500,112 @@ surv_curves <- meta_surv_df %>%
 coord_cartesian(clip = "off", ylim = c(0, 1), expand = FALSE) +
   xlab("Time (days)") + 
   ylab("Event Probability") +
-  scale_x_continuous(limits = c(1, 90), breaks = c(1, 30, 60, 90)) +
+  scale_x_continuous(limits = c(0, 90), breaks = c(0, 30, 60, 90)) +
   theme_classic() + 
-  labs(color = "Neuro Status",
+  labs(color = "Neurological Status",
        fill = "") + 
   theme(legend.position="top",
-        strip.text = element_text(color = "black", size = 12)); surv_curves
+        legend.title = element_text(face = "bold"),
+        legend.text = element_text(size = 10, face = "bold"),
+        strip.text = element_text(color = "black", size = 12, face = "bold"),
+        panel.spacing = unit(60, "pt"),
+        axis.title.x = element_text(size = 13, face = "bold"),
+        axis.title.y = element_text(size = 13, face = "bold"),
+        axis.text.y = element_text(size = 10),
+        axis.text.x = element_text(color = "black", size = 10 )); surv_curves
 
 ggsave("figures/survival_curves.png", surv_curves, height = 5, width = 6)
-
-# confidence interval too narrow?
-View(meta_surv_df %>% mutate(ci_diff = abs(ci_l - ci_u)))
 ```
+
+## Risk table - adults
 
 ```{r}
 
+risk_table <- list()
+
+for (outcome_i in outcomes) {
+  risk_table[[outcome_i]] <-
+    adult_results %>% 
+    lapply(get_risk_table, population = "adults", comorb_method = "ind", censor_cutoff = "90", outcome = outcome_i) %>%
+    bind_rows() %>%
+    mutate(outcome = outcome_i) 
+}
+
+
+# tidy table
+risk_table_tidy <- bind_rows(risk_table) %>% 
+  mutate(
+    outcome = factor(outcome, levels = outcomes) %>%
+      fct_recode(
+        "Mortality" = "deceased_reg_elix",
+        "Discharge" = "time_first_discharge_reg_elix"
+      ),
+    strata = factor(strata) %>% 
+      fct_recode(
+        "NNC" = "neuro_post=None",
+        "CNS" = "neuro_post=Central",
+        "PNS" = "neuro_post=Peripheral"
+      )
+    
+  ) %>% 
+  # in some cases, sites did not have patients past 60 days -- thus the cumulative at T=90 is off - i need to carry forward the previous sum.event and n.risk?
+  complete(time, site, nesting(strata, outcome)) %>%
+  arrange(outcome, site, strata)  %>% 
+  fill(n.risk, cum.n.event, .direction = "down") %>% 
+  group_by(outcome, strata, time) %>% 
+  mutate(sum.n.risk = sum(n.risk, na.rm = TRUE), 
+         sum.event = sum(cum.n.event, na.rm = TRUE),
+         sum.censor = sum(cum.n.censor, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  distinct(outcome, time, strata, sum.n.risk, sum.event, sum.censor)
+
+
+
+write.csv(risk_table_tidy, "tables/risk_table_90_ind.csv", row.names = FALSE)
 ```
 
+## Risk table - pediatrics
+
+```{r}
+risk_table <- list()
+
+for (outcome_i in outcomes) {
+  risk_table[[outcome_i]] <-
+    pediatric_results %>% 
+    lapply(get_risk_table, population = "pediatrics", comorb_method = "ind", censor_cutoff = "90", outcome = outcome_i) %>%
+    bind_rows() %>%
+    mutate(outcome = outcome_i) 
+}
+
+
+# tidy table
+risk_table_tidy_peds <- bind_rows(risk_table) %>% 
+  mutate(
+    outcome = factor(outcome, levels = outcomes) %>%
+      fct_recode(
+        "Mortality" = "deceased_reg_elix",
+        "Discharge" = "time_first_discharge_reg_elix"
+      ),
+    strata = factor(strata) %>% 
+      fct_recode(
+        "NNC" = "neuro_post=None",
+        "CNS" = "neuro_post=Central",
+        "PNS" = "neuro_post=Peripheral"
+      )
+    
+  ) %>% 
+  # in some cases, sites did not have patients past 60 days -- thus the cumulative at T=90 is off - i need to carry forward the previous sum.event and n.risk?
+  complete(time, site, nesting(strata, outcome)) %>%
+  arrange(outcome, site, strata)  %>% 
+  fill(n.risk, cum.n.event, .direction = "down") %>% 
+  group_by(outcome, strata, time) %>% 
+  mutate(sum.n.risk = sum(n.risk, na.rm = TRUE), 
+         sum.event = sum(cum.n.event, na.rm = TRUE),
+         sum.censor = sum(cum.n.censor, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  distinct(outcome, time, strata, sum.n.risk, sum.event, sum.censor)
+
+
+
+write.csv(risk_table_tidy, "tables/risk_table_90_ind_peds.csv", row.names = FALSE)
+```
