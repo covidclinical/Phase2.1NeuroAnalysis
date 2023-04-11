@@ -20,7 +20,7 @@ Our study leverages a multinational study of > 106,000 hospitalized COVID-19 adu
 
 Explore the analysis using our interactive notebooks!
 
-1. [Patient Characteristics](COVID-and-Neurological-Illness.html)
+1. [Patient Characteristics](Patient-Characteristics.html)
 ---
 
 ## **Data pre-processing**
