@@ -40,7 +40,7 @@ Our study leverages a multinational study of > 106,000 hospitalized COVID-19 adu
 
     *Of note, this script reads in healthcare system data stored in the `results_comorbidity/`. After having sites run the initital package, I realized I forgot to include one of the comorbidity tables in the output. For this reason, sites reran just the comorbidity analysis and generated the `[site]_comorb_results.rda` file. In some cases, sites reran the full code (thus, generating the typical `[site]_results.rda` file) and I subsequently manually changed the name of the .rda file to be consistent and allow this script to remain streamlined.*
 
-## **Analysis**
+## **Meta-Analysis**
 
 1.  `Patient-Characteristics.Rmd` - generate preliminary demographics, clinical course, and comorbidity analyses
 
