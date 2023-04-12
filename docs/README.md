@@ -12,9 +12,9 @@ Our study leverages a multinational study of > 106,000 hospitalized COVID-19 adu
 
 Specifically, we used ICD codes to stratify patients into three groups of patients with 1) no neurological condition (NNC), 2) a central nervous system condition (CNS), or 3) a peripheral nervous system condition (PNS):
 
-<center>
-!(/Phase2.1NeuroAnalysis/assets/neuro-stratification.png){.class width="400" height="320px"}
-</center>
+![](/Phase2.1NeuroAnalysis/docs/assets/neuro-stratification.png | width=100)
+
+
 
 ## **Code and Analysis**
 
