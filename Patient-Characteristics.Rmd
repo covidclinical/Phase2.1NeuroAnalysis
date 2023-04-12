@@ -10,7 +10,7 @@ output:
     theme: spacelab
 ---
 
-This notebook describes the **106,229** hospitalized COVID-19 positive patients that were studied as part of the [Consortium for Clinical Characterization of COVID-19 by EHR](https://covidclinical.net/) Neurology group.
+This notebook describes the **106,229** adult and pediatric hospitalized COVID-19 positive patients that were studied as part of the [Consortium for Clinical Characterization of COVID-19 by EHR](https://covidclinical.net/) Neurology group. This analysis contains the results of patients from 21 different healthcare systems spanning 6 countries.
 
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -28,7 +28,9 @@ source("R/demo_tables.R")
 source("R/utils.R")
 ```
 
-# **Import Data from each Healthcare system**
+# **Import Data from each Healthcare System**
+
+Each participating healthcare system ran the analysis locally on patient level data using our [customized R package](https://github.com/covidclinical/Phase2.1NeuroRPackage). The output of each local analysis consisted of aggregated counts and summary statistics (means, medians, hazard ratios, p-values, etc). Summary results from each healthcare system were then aggregated and are imported and then combined using the following code:
 
 ```{r message=FALSE, warning=FALSE}
 # read in files from results folder 
@@ -74,6 +76,8 @@ load("processed/neuro_pt_counts.rda")
 
 # **Pre-processing**
 
+The following code pre-processes the demographic and clinical course data in order to construct a Table 1.
+
 **1. Format primary demographic characteristics**
 
 ```{r message=FALSE, warning=FALSE}
@@ -91,7 +95,6 @@ demo_table_combine <- rbind(demo_table_adult, demo_table_pediatric)
 
 **2. Format clinical characteristics (i.e: continuous variables such as median time to discharge)**
 
-
 ```{r message=FALSE, warning=FALSE}
 clinical_table_adult <- create_clinical_tableone(sorted_sites = adult_sites, is_pediatric = FALSE)
 
@@ -99,7 +102,6 @@ clinical_table_pediatric <- create_clinical_tableone(sorted_sites = pediatric_si
 
 clinical_table_combine <- rbind(clinical_table_adult, clinical_table_pediatric)
 ```
-
 
 **3. Conduct additional pre-processing of clinical variables**
 
@@ -111,7 +113,9 @@ clinical_table_pediatric_clean <- clean_clinical_tables(clinical_table = clinica
 clinical_table_clean_combine <- rbind(clinical_table_adult_clean, clinical_table_pediatric_clean)
 ```
 
-**Add Comorbidity data**
+**4. Add Comorbidity data**
+
+Here we create separate lists of the top 4 comorbidities in the adult and pediatric populations
 
 ```{r}
 comorbidity_table_adults <- comorb_table_wide %>%
@@ -131,6 +135,8 @@ top_comorb_pediatrics <- comorbidity_table_pediatric$Comorbidity
 # **Demographics**
 
 ## Table One - Combined
+
+The below table contains the counts and summary stats of the entire cohort (adult & pediatric patients).
 
 ```{r}
 neuro_pt_counts_sum <- colSums(neuro_pt_counts[,-1]) %>% 
@@ -292,16 +298,11 @@ kbl(tableone_pediatric %>%
 write.csv(tableone_pediatric, 'tables/table1_pediatric.csv', row.names = FALSE)
 ```
 
-**Sample Size**
-
-```{r message=FALSE, warning=FALSE}
-n_adult <- as.numeric(tableone_adult$N)[1]
-n_pediatric <- as.numeric(tableone_pediatric$N)[1]
-```
-
 # **Demographic & Clinical Course Analysis**
 
-Evaluate characteristics among neuro status groups
+Next we will evaluate characteristics among patients stratified by neurological status: 1) patients with no neurological condition (NNC), 2) patients with a central nervous system condition (CNS), and 3) patients with a peripheral nervous system condition (PNS).
+
+Categorical variables will be evaluated with chi-square tests, while continuous variables will be evaluated with a non-parametric anova (Kruskal-Wallis) test.
 
 **1. Conduct chi-squared tests for categorical demographic variables**
 
@@ -362,7 +363,7 @@ compute_chi_square <- function(tableone, demo_table) {
   }
 ```
 
-**Combined Adult & Pediatric**
+**Combined Adult & Pediatric Chi-Square Results**
 
 ```{r message=FALSE, warning=FALSE}
 chisq_combine <- compute_chi_square(tableone = tableone_combine %>%
@@ -375,7 +376,7 @@ chisq_combine <- compute_chi_square(tableone = tableone_combine %>%
 datatable(chisq_combine %>% arrange(p_value))
 ```
 
-**Adult**
+**Adult Chi-Square Results**
 
 ```{r message=FALSE, warning=FALSE}
 chisq_adult <- compute_chi_square(tableone = tableone_adult %>%
@@ -388,7 +389,7 @@ chisq_adult <- compute_chi_square(tableone = tableone_adult %>%
 datatable(chisq_adult %>% arrange(p_value))
 ```
 
-**Pediatric**
+**Pediatric Chi-Square Results**
 
 ```{r message=FALSE, warning=FALSE}
 chisq_pediatric <- compute_chi_square(tableone = tableone_pediatric %>%
@@ -401,7 +402,7 @@ chisq_pediatric <- compute_chi_square(tableone = tableone_pediatric %>%
 datatable(chisq_pediatric %>% arrange(p_value))
 ```
 
-**2. Conduct anova (Kruskal-Wallis) tests for continuous clinical variables**
+**2. Conduct non-parametric anova (Kruskal-Wallis) tests for continuous clinical variables**
 
 ```{r}
 compute_kruskal <- function(clinical_table) {
@@ -494,7 +495,7 @@ compute_kruskal <- function(clinical_table) {
   }
 ```
 
-**Adult & Pediatric Kruskall-Wallis**
+**Combined Adult & Pediatric Kruskal-Wallis Results**
 
 ```{r message=FALSE, warning=FALSE}
 
@@ -502,7 +503,7 @@ kw_combine <- compute_kruskal(clinical_table = clinical_table_combine)
 datatable(kw_combine %>% arrange(p_value))
 ```
 
-**Adult Clinical Kruskall-Wallis**
+**Adult Kruskal-Wallis Results**
 
 *Note: median CNS is 0 for all sites (reason for the NA values)*
 
@@ -512,7 +513,7 @@ kw_adult <- compute_kruskal(clinical_table = clinical_table_adult)
 datatable(kw_adult %>% arrange(p_value))
 ```
 
-**Pediatric Kruskall-Wallis**
+**Pediatric Kruskal-Wallis Results**
 
 ```{r message=FALSE, warning=FALSE}
 
@@ -522,7 +523,7 @@ datatable(kw_pediatric %>% arrange(p_value))
 
 **3. Combine chi-square and Kruskal-Wallis results**
 
-We will evaluate significance when controlling for False Discovery Rate (FDR) 
+We will evaluate significance when controlling for False Discovery Rate (FDR)
 
 ```{r}
 tableone_stats <- function(chisq_results, anova_results, population) {
@@ -554,7 +555,9 @@ tableone_stats <- function(chisq_results, anova_results, population) {
 }
 ```
 
-**Incorporate Comorbidities**
+**4. Incorporate Comorbidities**
+
+We will also add the top 4 comorbidities for each population to our table one. For the combined adult and pediatric table, we will use the top 4 comorbidities of the adult population.
 
 ```{r}
 # define matrix for each comorbidity
@@ -663,7 +666,6 @@ combine_tableone_stats <- tableone_stats(chisq_results = chisq_combine_comorb,
 datatable(combine_tableone_stats)
 ```
 
-
 ## Table One - Adult Analysis
 
 ```{r}
@@ -688,9 +690,9 @@ datatable(pediatric_tableone_stats)
 
 # **Neurological Diagnosis Analysis**
 
-Evaluate CNS and PNS neurological diagnoses in our patient cohort
+Next, we will evaluate the diagnoses captured with the CNS and PNS groups. Specifically, we will examine the frequency of CNS and PNS diagnoses by patient age group and by clinical outcomes (mortality and COVID-19 severity).
 
-**Format Diagnostic code data**
+**1. Format neurological icd code data**
 
 ```{r fig.width=12}
 # import list of ICD-9/ICD-10 codes
@@ -730,7 +732,7 @@ neuro_icds_9 <- read.csv("public-data/icd9_tab_CNSvPNS.csv") %>%
 icds <- rbind(neuro_icds_10, neuro_icds_9)
 ```
 
-**Calculate total number of neuro diagnoses for each adults & pediatrics**
+**2. Calculate total number of neurological diagnoses for each adults & pediatrics**
 
 ```{r}
 compute_neuro_counts <- function(sorted_sites, sample_size, is_pediatric = FALSE) {
@@ -788,7 +790,12 @@ compute_neuro_counts <- function(sorted_sites, sample_size, is_pediatric = FALSE
 
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
+# create vectors containing patient sample sizes
+n_adult <- as.numeric(tableone_adult$N)[1]
+n_pediatric <- as.numeric(tableone_pediatric$N)[1]
+
+# calculate the total neurological patient counts 
 neuro_counts_adult <- compute_neuro_counts(sorted_sites = adult_sites,
                                            sample_size = n_adult, 
                                            is_pediatric = FALSE)
@@ -807,12 +814,16 @@ write.csv(neuro_counts_combined, paste0("tables/Supp.Table2_diagnoses", ".csv"),
   
 ```
 
-```{r}
-datatable(neuro_counts_adult, caption = "Number (%) of Adult Patients with each Neurological Diagnosis") 
-```
+## Number (%) of Adult Patients with each Neurological Diagnosis
 
 ```{r}
-datatable(neuro_counts_pediatric, caption = "Number (%) of Pediatric Patients with each Neurological Diagnosis") 
+datatable(neuro_counts_adult) 
+```
+
+## Number (%) of Pediatric Patients with each Neurological Diagnosis
+
+```{r}
+datatable(neuro_counts_pediatric) 
 ```
 
 ## Evaluate Diagnoses by Age & Outcome
@@ -885,7 +896,6 @@ stratified_neuro_counts_pediatric <- compute_stratified_neuro_counts(sorted_site
                                                                  is_pediatric = TRUE,
                                                                  tableone = tableone_pediatric)
 ```
-
 
 ```{r}
 compute_stratified_neuro_counts_age <- function(stratified_neuro_counts, tableone) {
@@ -1017,7 +1027,7 @@ adult_ped_combined_plot <- ggplot(stratified_neuro_counts_age_combined,
 ggsave("figures/Fig3_diagnoses_by_age_adult_ped_18group.png", adult_ped_combined_plot, width = 40, height = 19, dpi = 300)
 ```
 
-![](figures/Fig3_diagnoses_by_age_adult_ped_18group.png){#id .class width=1000 height=800px}
+![](figures/Fig3_diagnoses_by_age_adult_ped_18group.png){#id .class width="1000" height="800px"}
 
 ## Evaluate Diagnoses by Outcome
 
@@ -1112,14 +1122,13 @@ pediatric_outcomes = ggplot(stratified_neuro_counts_outcomes %>%
 ggsave("figures/SuppFig1_diagnoses_by_outcomes_pediatric.png", pediatric_outcomes, width = 25, height = 9, dpi = 300)
 ```
 
-
 ```{r eval=FALSE, include=TRUE}
 #grid.arrange(pediatric_outcomes, adult_outcomes, ncol=1)
 
 ggsave("figures/SuppFig1_diagnoses_by_outcome_combined.png", grid.arrange(pediatric_outcomes, adult_outcomes, ncol=1), width = 25, height = 25, dpi = 300)
 ```
 
-![](figures/SuppFig1_diagnoses_by_outcome_combined.png){#id .class width=800 height=800px}
+![](figures/SuppFig1_diagnoses_by_outcome_combined.png){.class width="800" height="800px"}
 
 ## Evaluate patients with "Both" CNS and PNS diseases
 
@@ -1143,7 +1152,9 @@ print(paste(both_counts, "(", round(both_counts/(as.numeric(tableone_combine$N[1
 
 # **Comorbidity Analysis**
 
-Create comorbidity count table
+Next, we will evaluate the frequency of comorbidities in our population and the associated risk that comorbidities may incur for acquiring a CNS or PNS diagnosis during COVID-19 hospitalization.
+
+**1. Create a table of counts for each comorbidity and stratified by neurological status.**
 
 ```{r}
 comorbidity_table_adult <- comorb_table_wide %>%
@@ -1170,7 +1181,7 @@ supp_comorbidity_table <- rbind(comorbidity_table_adult, comorbidity_table_pedia
 write.csv(supp_comorbidity_table, "tables/SuppTable_Comorbidity_Counts.csv", row.names = FALSE)
 ```
 
-**Create vector counts of patients with comorbidity data**
+**2. Create vector counts of patients with comorbidity data**
 
 ```{r}
 neuro_pt_counts_sum_adult <- neuro_pt_counts %>% 
@@ -1190,7 +1201,7 @@ cns_n_pediatric = neuro_pt_counts_sum_pediatric$CNS_n
 pns_n_pediatric = neuro_pt_counts_sum_pediatric$PNS_n
 ```
 
-### Calculate Relative Risk (RR)
+**3. Calculate the relative risk (RR) of developing a CNS or PNS diagnosis for patients with each comorbidity**
 
 ```{r}
 calculate_rr <- function(is_pediatric = FALSE) {
@@ -1382,19 +1393,24 @@ calculate_rr <- function(is_pediatric = FALSE) {
   }
 ```
 
+### Relative Risk (RR)
+
+Here we plot the relative risk of acquiring a CNS or PNS diagnosis in adult patients who have each comorbidity of the ECI compared to those who do not.
+
+We are not able to compute this analysis in pediatric patients, due to the overall low incidence of comorbidities and neurological illness during COVID-19 hospitalization.
+
 ```{r eval=TRUE, include=FALSE}
 rr_adult <- calculate_rr(is_pediatric = FALSE)
 #rr_pediatric <- calculate_rr(is_pediatric = TRUE)
 ```
 
-![](figures/Figure4.relative_risk_Adult.png){#id .class width=1000 height=800px}
-
+![](figures/Figure4.relative_risk_Adult.png){.class width="1000" height="800px"}
 
 ### LPCA deviance explained
 
-How much deviance is explained with 10 principal components for 30 comorbidity types?
+During the local analysis for each participating healthcare system, we computed the top 10 principal components using logistic principal component analysis (LPCA). LPCA was performed on the matrix of npatients x 29 ECI comorbidities. Across healthcare systems, 10 principal components explained at least 75% of the model deviance. 
 
-Across all healthcare systems, 10 principal components explained above 75% of the deviance.
+This supplementary analysis was performed in order to determine the best way to adjust for each patient's comorbidity burden in our downstream survival models.
 
 ```{r}
 compare_deviance <- function(sorted_sites, is_pediatric=FALSE) {
