@@ -42,4 +42,6 @@ Our study leverages a multinational study of > 106,000 hospitalized COVID-19 adu
 
 ## **Analysis**
 
-1.  `04_Patient-Characteristics.Rmd` - generate preliminary demographics, clinical course, and comorbidity analyses
+1.  `Patient-Characteristics.Rmd` - generate preliminary demographics, clinical course, and comorbidity analyses
+
+2. `Meta-Analysis-Cox-PH.Rmd` - performs the random-effects meta-analysis on the Cox-PH models at each site and plots forest plots to visualize the local and global risk estimates.
