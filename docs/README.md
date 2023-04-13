@@ -12,7 +12,7 @@ Our study leverages a multinational study of \> 106,000 hospitalized COVID-19 ad
 
 Specifically, we used ICD codes to stratify patients into three groups of patients with 1) no neurological condition (NNC), 2) a central nervous system condition (CNS), or 3) a peripheral nervous system condition (PNS):
 
-![](assets/neuro-stratification-diagram.png){width="424"}
+![](assets/neuro-stratification-diagram.png)
 
 ## **Code and Analysis**
 
@@ -21,6 +21,8 @@ Explore the analysis using our interactive notebooks!
 1.  [Patient Characteristics](Patient-Characteristics.html)
 
 2.  [Meta-Analysis Cox-PH: Risk of Poor Health Outcomes](Meta-Analysis-Cox-PH.html)
+
+3. [Meta-Analysis Kaplan-Meier Survival Curves: Time to Poor Health Outcomes](Meta-Analysis-KM-Survival-Curves.Rmd)
 
 To view and run all the code yourself, please navigate to the following repos:
 

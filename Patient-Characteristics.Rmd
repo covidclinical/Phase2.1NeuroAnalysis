@@ -12,6 +12,8 @@ output:
 
 This notebook describes the **106,229** adult and pediatric hospitalized COVID-19 positive patients that were studied as part of the [Consortium for Clinical Characterization of COVID-19 by EHR](https://covidclinical.net/) Neurology group. This analysis contains the results of patients from 21 different healthcare systems spanning 6 countries.
 
+<center>![](figures/neuro-stratification-diagram.png){width="373"}</center>
+
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
 library(gridGraphics)
@@ -1027,7 +1029,7 @@ adult_ped_combined_plot <- ggplot(stratified_neuro_counts_age_combined,
 ggsave("figures/Fig3_diagnoses_by_age_adult_ped_18group.png", adult_ped_combined_plot, width = 40, height = 19, dpi = 300)
 ```
 
-![](figures/Fig3_diagnoses_by_age_adult_ped_18group.png){#id .class width="1000" height="800px"}
+![](figures/Fig3_diagnoses_by_age_adult_ped_18group.png){width="1031" height="337"}
 
 ## Evaluate Diagnoses by Outcome
 
@@ -1404,7 +1406,7 @@ rr_adult <- calculate_rr(is_pediatric = FALSE)
 #rr_pediatric <- calculate_rr(is_pediatric = TRUE)
 ```
 
-![](figures/Figure4.relative_risk_Adult.png){.class width="1000" height="800px"}
+![](figures/Figure4.relative_risk_Adult.png){.class width="827" height="452"}
 
 ### LPCA deviance explained
 
@@ -1412,7 +1414,7 @@ During the local analysis for each participating healthcare system, we computed 
 
 This supplementary analysis was performed in order to determine the best way to adjust for each patient's comorbidity burden in our downstream survival models.
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 compare_deviance <- function(sorted_sites, is_pediatric=FALSE) {
   
   pca_dev <- list()
