@@ -20,7 +20,7 @@ Explore the analysis using our interactive notebooks!
 
 2.  [Meta-Analysis Cox-PH: Risk of Poor Health Outcomes](Meta-Analysis-Cox-PH.html)
 
-3. [Meta-Analysis Kaplan-Meier Survival Curves: Time to Poor Health Outcomes](Meta-Analysis-KM-Survival-Curves.Rmd)
+3.  [Meta-Analysis Kaplan-Meier Survival Curves: Time to Poor Health Outcomes](Meta-Analysis-KM-Survival-Curves.html)
 
 To view and run all the code yourself, please navigate to the following repos:
 
