@@ -14,6 +14,8 @@ Specifically, we used ICD codes to stratify patients into three groups of patien
 
 ![](assets/neuro-stratification2.png)
 
+<img src="assets/neuro-stratification2.png" width="10">
+
 
 
 ## **Code and Analysis**
