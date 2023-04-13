@@ -14,7 +14,7 @@ Specifically, we used ICD codes to stratify patients into three groups of patien
 
 ![](assets/neuro-stratification2.png)
 
-<img src="assets/neuro-stratification2.png" width="10">
+<img src="https://github.com/covidclinical/Phase2.1NeuroAnalysis/blob/master/docs/assets/neuro-stratification.png" width="10">
 
 
 
@@ -31,7 +31,7 @@ To view and run all the code yourself, please navigate to the following repos:
 
 * [4CE-Phase2.1Neuro R package run locally at each healthcare system](https://github.com/covidclinical/Phase2.1NeuroRPackage)
 
-* [4CE-Phase2.1Neuro Meta-Analysis](https://github.com/covidclinical/Phase2.1NeuroAnalysi)
+* [4CE-Phase2.1Neuro Meta-Analysis](https://github.com/covidclinical/Phase2.1NeuroAnalysis)
 
 *Note: Healthcare system summary and aggregate result files will be made available upon publication of the manuscript*
 
