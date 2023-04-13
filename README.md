@@ -4,23 +4,16 @@ Hutch, MR*, Son J*, Le TT*, Hong C*, Xuan W*, Shakeri Z*, Morris M, Gutiérrez-S
 
 *Share first co-authorship, **Share senior co-authorship
 
-##
+[A Consortium for Clinical Characterization of COVID-19 by EHR study](https://covidclinical.net/)
 
-A [Consortium for Clinical Characterization of COVID-19 by EHR](https://covidclinical.net/) study.
+# **Patient Population**
 
-Our study leverages a multinational study of > 106,000 hospitalized COVID-19 adult and pediatric positive patients from 21 healthcare systems across 6 countries. We examined and report the clinical health outcomes (length of hospital stay and mortality) of COVID-19 patients with concurrent neurological illness. 
+Our study leverages a multinational study of \> 106,000 hospitalized COVID-19 adult and pediatric positive patients from 21 healthcare systems across 6 countries. We examined and report the clinical health outcomes (length of hospital stay and mortality) of COVID-19 patients with concurrent neurological diagnoses.
 
-##
+Specifically, we used ICD codes to stratify patients into three groups of patients with 1) no neurological condition (NNC), 2) a central nervous system condition (CNS), or 3) a peripheral nervous system condition (PNS) in order to evaluate the risk of poor health outcomes by neurologic status.
 
-[Preprint Available](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4057133)
+# **View Code and Analysis:**
 
-*Manuscript currently under review*
-
-## 
-
-## **View Code and Analysis:**
-
-## 
 
 ## **Data pre-processing**
 
@@ -45,3 +38,12 @@ Our study leverages a multinational study of > 106,000 hospitalized COVID-19 adu
 1.  `Patient-Characteristics.Rmd` - generate preliminary demographics, clinical course, and comorbidity analyses
 
 2. `Meta-Analysis-Cox-PH.Rmd` - performs the random-effects meta-analysis on the Cox-PH models at each site and plots forest plots to visualize the local and global risk estimates.
+
+3. `Meta-Analysis-KM-Survival-Curves.Rmd` - performs the random-effects meta-analysis on the covariate adjusted Kaplan-Meier survival curves.
+
+## 
+
+[2021 Preprint Available](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4057133)
+
+*Revised Manuscript currently under review*
+
