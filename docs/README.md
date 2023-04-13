@@ -10,9 +10,7 @@
 
 Our study leverages a multinational study of \> 106,000 hospitalized COVID-19 adult and pediatric positive patients from 21 healthcare systems across 6 countries. We examined and report the clinical health outcomes (length of hospital stay and mortality) of COVID-19 patients with concurrent neurological diagnoses.
 
-Specifically, we used ICD codes to stratify patients into three groups of patients with 1) no neurological condition (NNC), 2) a central nervous system condition (CNS), or 3) a peripheral nervous system condition (PNS):
-
-![](assets/neuro-stratification-diagram.png)
+Specifically, we used ICD codes to stratify patients into three groups of patients with 1) no neurological condition (NNC), 2) a central nervous system condition (CNS), or 3) a peripheral nervous system condition (PNS) in order to evaluate the risk of poor health outcomes by neurologic status.
 
 ## **Code and Analysis**
 
