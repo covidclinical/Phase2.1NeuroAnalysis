@@ -19,6 +19,7 @@ library(metafor)
 library(meta)
 library(egg)
 library(DT)
+library(ggpubr)
 source("R/forester_custom.R")
 source("R/analyze_survival.R")
 ```
@@ -211,7 +212,7 @@ meta_surv_df <- res_dat_surv %>%
   ungroup()
 ```
 
-# **Generate survival curves**
+# **Generate Survival Curves**
 
 **Random effects meta analysis function**
 
@@ -294,6 +295,137 @@ coord_cartesian(clip = "off", ylim = c(0, 1), expand = FALSE) +
 
 ggsave("figures/survival_curves.png", surv_curves, height = 5, width = 6)
 ```
+
+## Evaluate Time to Event
+
+```{r message=FALSE, warning=FALSE}
+breaks_list <- list("Discharge" = c(0, 6, 8, 11, 30, 60, 90),
+                    "Mortality" = c(0, 12, 24, 30, 60, 90))
+
+# determine median time where at least 50% patients were discharged
+median_data_discharge <- meta_surv_ci_df %>%
+  group_by(strata, outcome) %>%
+  filter(outcome == "Discharge") %>%
+  summarize(median_time = min(time[m_surv <= 0.5])) %>%
+  mutate(yend = 0.5,
+         y = 0.5)
+#determine median time where at least 10% patients died
+median_data_mortality <- meta_surv_ci_df %>%
+  group_by(strata, outcome) %>%
+  filter(outcome == "Mortality") %>%
+  summarize(median_time = min(time[m_surv <= 0.9])) %>%
+  mutate(yend = .9,
+         y = 0.9)
+
+median_data <- rbind(median_data_discharge, median_data_mortality) %>%
+  filter(!is.infinite(median_time))
+
+# plot individual survival plots
+discharge_plot <- meta_surv_ci_df %>%
+  filter(outcome == 'Discharge') %>%
+  ggplot(aes(
+    x = time, y = m_surv,
+    color = strata,
+    fill = strata,
+  )) +
+  geom_line() +
+  geom_ribbon(aes(ymin = ci_l, ymax = ci_u, fill = strata), alpha = 0.2, linetype = 0, show.legend = FALSE) +
+  labs(color = NULL, y = NULL) +
+  scale_colour_manual(values = group.colors) +
+  scale_fill_manual(values = group.colors) +
+  coord_cartesian(clip = "off", ylim = c(0, 1), expand = FALSE) +
+  xlab("Time (days)") +
+  ylab("Event Probability") +
+  scale_x_continuous(limits = c(0, 90), breaks = breaks_list$Discharge) + #breaks = breaks_fun) +
+  theme_classic() +
+  labs(color = "Neurological Status",
+       fill = "") +
+  ggtitle("Discharge") +
+  theme(plot.title = element_text(face = "bold", hjust=0.5, size = 16),
+        legend.position="top",
+        legend.title = element_text(face = "bold"),
+        legend.text = element_text(size = 8, face = "bold"),
+        strip.text = element_text(color = "black", size = 12, face = "bold"),
+        panel.spacing = unit(60, "pt"),
+        axis.title.x = element_text(size = 13, face = "bold"),
+        axis.title.y = element_text(size = 13, face = "bold"),
+        axis.text.y = element_text(size = 10),
+                axis.text.x = element_text(
+          color = c("black","#BBBBBC", "slateblue", "tomato", "black", "black", "black"), 
+          size = 10, 
+          face = c("bold", "plain", "plain", "plain", "bold", "bold", "bold"))
+        ) +
+  geom_segment(
+    aes(x = median_time, xend = median_time, y = 0, yend = yend, color = strata),
+    data = median_data %>% filter(outcome == "Discharge"),
+    linetype = "dashed",
+    size = 0.5
+  ) +
+  geom_segment(
+    aes(x = median_time, xend = 0, y = y, yend = yend, color = strata),
+    data = median_data %>% filter(outcome == "Discharge"),
+    linetype = "dashed",
+    size = 0.5
+  )
+
+mortality_plot <- meta_surv_ci_df %>%
+  filter(outcome == 'Mortality') %>%
+  ggplot(aes(
+    x = time, y = m_surv,
+    color = strata,
+    fill = strata,
+  )) +
+  geom_line() +
+  geom_ribbon(aes(ymin = ci_l, ymax = ci_u, fill = strata), alpha = 0.2, linetype = 0, show.legend = FALSE) +
+  labs(color = NULL, y = NULL) +
+  scale_colour_manual(values = group.colors) +
+  scale_fill_manual(values = group.colors) +
+  coord_cartesian(clip = "off", ylim = c(0, 1), expand = FALSE) +
+  xlab("Time (days)") +
+  ylab("Event Probability") +
+  scale_x_continuous(limits = c(0, 90), breaks = breaks_list$Mortality) + #breaks = breaks_fun) +
+  theme_classic() +
+  labs(color = "Neurological Status",
+       fill = "") +
+  ggtitle("Mortality") +
+  theme(plot.title = element_text(face = "bold", hjust=0.5, size = 16),
+        legend.position="none",
+        legend.title = element_text(face = "bold"),
+        legend.text = element_text(size = 10, face = "bold"),
+        strip.text = element_text(color = "black", size = 12, face = "bold"),
+        panel.spacing = unit(60, "pt"),
+        axis.title.x = element_text(size = 13, face = "bold"),
+        axis.title.y = element_text(size = 13, face = "bold"),
+        axis.text.y = element_text(size = 10),
+        axis.text.x = element_text(
+          color = c("black", "tomato", "#BBBBBC", "black", "black", "black"), 
+          size = 10, 
+          face = c("bold", "plain", "plain", "bold", "bold", "bold"))
+        ) +
+  geom_segment(
+    aes(x = median_time, xend = median_time, y = 0, yend = yend, color = strata),
+    data = median_data %>% filter(outcome == "Mortality"),
+    linetype = "dashed",
+    size = 0.5
+  ) +
+  geom_segment(
+    aes(x = median_time, xend = 0, y = y, yend = yend, color = strata),
+    data = median_data %>% filter(outcome == "Mortality"),
+    linetype = "dashed",
+    size = 0.5
+  )
+
+# combine plots into one figure
+survival_curves_time <- ggarrange(discharge_plot, mortality_plot, ncol=2, nrow=1, common.legend = TRUE, legend="top") %>%
+  ggexport(filename = "figures/survival_curves_time.pdf")
+
+
+ggsave("figures/survival_curves_times.png", ggarrange(discharge_plot, mortality_plot, ncol=2, nrow=1, common.legend = TRUE, legend="top"), height = 4, width = 8)
+
+ggarrange(discharge_plot, mortality_plot, ncol=2, nrow=1, common.legend = TRUE, legend="top")
+
+```
+
 
 ## Risk Table
 
