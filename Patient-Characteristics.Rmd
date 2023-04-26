@@ -12,7 +12,7 @@ output:
 
 This notebook describes the **106,229** adult and pediatric hospitalized COVID-19 positive patients that were studied as part of the [Consortium for Clinical Characterization of COVID-19 by EHR](https://covidclinical.net/) Neurology group. This analysis contains the results of patients from 21 different healthcare systems spanning 6 countries.
 
-<center>![](figures/neuro-stratification-diagram.png){width="373"}</center>
+<center>![](docs/assets/neuro-stratification-diagram.png){width="373"}</center>
 
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -1085,14 +1085,16 @@ adult_outcomes = ggplot(stratified_neuro_counts_outcomes %>%
   scale_y_discrete("", position="left", labels = function(x) str_wrap(x, width = 100)) +   
   scale_fill_manual(values = group.colors) +
   xlab("Number of Patients") + 
-    theme(legend.position = "none",
+  ggtitle("B. Adult") + 
+  theme(legend.position = "none",
+        plot.title = element_text(size = 44, face = "bold", hjust = -0.5), 
         strip.text.y = element_text(size = 35),
         strip.text.x = element_text(size = 30),
         axis.text.y.left = element_text(size = 20, face = "bold"),
         axis.text.x = element_text(size = 15),
         axis.title.x = element_text(size = 35))
 
-ggsave("figures/SuppFig1_diagnoses_by_outcomes_adult.png", adult_outcomes, width = 25, height = 15, dpi = 300)
+ggsave("figures/SuppFig1_diagnoses_by_outcomes_adult.png", adult_outcomes, width = 27, height = 15, dpi = 300)
 ```
 
 ```{r}
@@ -1110,24 +1112,26 @@ pediatric_outcomes = ggplot(stratified_neuro_counts_outcomes %>%
     size = 5,
     inherit.aes = TRUE) +
   scale_x_continuous(expand = expansion(mult = c(0,0.2))) + 
-  facet_grid(pns_cns ~ variable, scales = "free") + 
+  facet_grid(pns_cns ~ variable, scales = "free", space = "free_y") + 
   scale_y_discrete("", position="left", labels = function(x) str_wrap(x, width = 100)) +   
   scale_fill_manual(values = group.colors) +
   xlab("") + 
+  ggtitle("A. Pediatric") + 
   theme(legend.position = "none",
+        plot.title = element_text(size = 44, face = "bold", hjust = -0.5), 
         strip.text.y = element_text(size = 35),
         strip.text.x = element_text(size = 30),
         axis.text.y.left = element_text(size = 20, face = "bold"),
         axis.text.x = element_text(size = 15),
         axis.title.x = element_text(size = 35))
 
-ggsave("figures/SuppFig1_diagnoses_by_outcomes_pediatric.png", pediatric_outcomes, width = 25, height = 9, dpi = 300)
+ggsave("figures/SuppFig1_diagnoses_by_outcomes_pediatric.png", pediatric_outcomes, width = 27, height = 9, dpi = 300)
 ```
 
-```{r eval=FALSE, include=TRUE}
+```{r include=FALSE}
 #grid.arrange(pediatric_outcomes, adult_outcomes, ncol=1)
 
-ggsave("figures/SuppFig1_diagnoses_by_outcome_combined.png", grid.arrange(pediatric_outcomes, adult_outcomes, ncol=1), width = 25, height = 25, dpi = 300)
+ggsave("figures/SuppFig1_diagnoses_by_outcome_combined.png", grid.arrange(pediatric_outcomes, adult_outcomes, ncol=1), width = 27, height = 25, dpi = 300)
 ```
 
 ![](figures/SuppFig1_diagnoses_by_outcome_combined.png){.class width="800" height="800px"}
