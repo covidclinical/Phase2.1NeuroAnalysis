@@ -7,7 +7,7 @@ output: html_document
 
 This notebook evaluates the performance of Cox proportional hazard models constructed using three censor cutoff periods (30, 60, and 90 days) and three methods of adjusting for pre-admission health conditions (i.e., pre-existing comorbidity burden): (1) the inclusion of the 29 individual covariates (i.e., health conditions) comprising the Elixhauser Comorbidity Index, (2) the Elixhauser summary score, and (3) the top 10 principal components computed from logistic principal component analysis (LPCA).
 
-We also perform additional meta-analyses in order to evaluate the estimates of the indiviudal covariates (e.g., age, comoridities, etc) on each outcome.
+We also perform additional meta-analyses in order to evaluate the estimates of the individual covariates (e.g., age, comoridities, etc) on each outcome.
 
 Of note, this analysis is performed only on adult patients due to the pediatric cohort's low incidence of both poor health outcomes and neurological diagnoses during COVID-19 hospitalization.
 
