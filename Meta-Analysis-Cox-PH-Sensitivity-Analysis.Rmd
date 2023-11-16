@@ -28,7 +28,7 @@ source("R/analyze_survival.R")
 
 # Import Data from each Healthcare system
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 # read in files from results folder 
 # this folder contains all of the local healthcare system level analyses
 rdas <- list.files(
@@ -163,9 +163,9 @@ concordance_results <- bind_results(results_list = cox_concordance_results_adult
 
 ```
 
-**Concordance**
+### **Concordance**
 
-```{r}
+```{r fig.height=7, fig.width=12}
 c_plot <- ggplot(concordance_results %>% 
          mutate(comorb_method = factor(comorb_method,
                                        levels = c("ind", "score", "lpca")) %>% 
@@ -198,6 +198,8 @@ c_plot <- ggplot(concordance_results %>%
         axis.title.y = element_text(size = 15, face = "bold"),
         axis.text.x = element_text(size = 13, face = "bold", color = "black"),
         axis.text.y = element_text(size = 12, face = "bold"))
+
+c_plot
 
 ggsave("figures/Comorbidity_adjustment.png", c_plot, width = 12, height = 7, dpi = 300)
 ```
@@ -250,7 +252,7 @@ set `sm = "HR"` when estimate is logHR (which is coef in our model): <https://cr
 
 \*Note: We excluded sites with \< 3 neuro patients in a category
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 ## adults 
 meta_results_adults_cns <- list()
 
@@ -286,7 +288,7 @@ for (outcome_i in outcomes) {
 
 ## Random effects meta-analysis - PNS
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 ## adults
 meta_results_adults_pns <- list()
 
@@ -411,9 +413,9 @@ datatable(meta_results_pns %>%
           filter="top")
 ```
 
-**Hazard-Ratio**
+### **Hazard-Ratio**
 
-```{r}
+```{r fig.height=7, fig.width=12}
 pd <- position_dodge(width = 0.6)
 
 meta_results_cns$neuro <- "CNS"
@@ -459,12 +461,14 @@ meta_comorb_comparison <- ggplot(meta_mortality_results %>%
        legend.title = element_text(size = 15, face = "bold"),
        legend.text = element_text(size = 13, face = "bold"))
 
+meta_comorb_comparison
+
 ggsave("figures/Comorbidity_adjustment_HR.png", meta_comorb_comparison, width = 12, height = 7, dpi = 300)
 ```
 
 ## Evaluate individual covariates
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 variables <- cox_results %>% 
   filter(comorb_method == "ind") %>% 
   distinct(variable)
@@ -639,6 +643,8 @@ age_hr <- ggplot(meta_ind_age, aes(x=TE.random, y=Covariate, colour=Covariate, g
 
 ggsave("figures/Hazard_ratio_age.png", age_hr, width = 12, height = 6, dpi = 300)
 ```
+
+### Evaluate all covariates
 
 Create a scale function to identify the min and max CI for each site, excluding sites with values of 'Inf' or our invalid sites
 
