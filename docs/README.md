@@ -22,6 +22,8 @@ Explore the analysis using our interactive notebooks!
 
 3.  [Meta-Analysis Kaplan-Meier Survival Curves: Time to Poor Health Outcomes](Meta-Analysis-KM-Survival-Curves.html)
 
+4.  [Meta-Analysis Cox-PH: Sensitivity Analysis: Comorbidity Adjustment and Covariate Evaluation](Meta-Analysis-Cox-PH-Sensitivity-Analysis.html)
+
 To view and run all the code yourself, please navigate to the following repos:
 
 -   [4CE-Phase2.1Neuro R package run locally at each healthcare system](https://github.com/covidclinical/Phase2.1NeuroRPackage)
