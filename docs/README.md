@@ -1,8 +1,8 @@
 # **Neurological Diagnoses in Hospitalized COVID-19 Patients Associated With Adverse Outcomes: A Multinational Cohort Study**
 
-**Hutch, MR**, **Son J**, **Le TT**, **Hong C**, **Xuan W**, **Shakeri Z**, Morris M, Gutiérrez-Sacristán A, Klann G, Spiridou A, Bellazzi Riccardo, Benoit V, Bonzel C, Bryant WA, Cho K, Das P, Hanauer DA, Henderson DW, Ho YL, Loh W, Makoudjou A, Malovini A, Moal B, Mowery DL, Samayamuthu MJ, Sanz Vidorreta FJ, Schriver ER, Schubert P, Talbert J, Tan ALM, Tan BWL, Tan BWQ, Tibollo V, Yuan W, Avillach P, Gehlenborg N, Omenn GS, Characterization of COVID-19 by EHR (4CE), The Consortium for Clinical, **Visweswaran S**, **Cai T**, **Luo Y**, **Xia Z**.
+Meghan R Hutch BS$^{*}$, Jiyeon Son MD$^{*}$, Trang T Le PhD$^{*}$, Chuan Hong PhD$^{*}$, Xuan Wang PhD$^{*}$, Zahra Shakeri Hossein Abad PhD$^{*}$, Michele Morris BA, Alba Gutiérrez-Sacristán PhD, Jeffrey G Klann MEng, PhD, Anastasia Spiridou PhD, Ashley Batugo BS, Riccardo Bellazzi MS, PhD, Vincent Benoit PhD, Clara-Lea Bonzel MSc, William A Bryant PhD, Lorenzo Chiudinelli PhD, Kelly Cho, MPH, Priyam Das PhD, Tomás González González MD, David A Hanauer MD, MS, Darren W Henderson BS,Yuk-Lam Ho MPH, Ne Hooi Will Loh MBBS, Adeline Makoudjou MD, Simran Makwana MS, Alberto Malovini PhD, Bertrand Moal MD, PhD, Danielle L Mowery PhD, Antoine Neuraz MD, PhD, Malarkodi Jebathilagam Samayamuthu MD, Fernando J Sanz Vidorreta BS, Emily R Schriver MS, Petra Schubert MPH, Jeffery Talbert PhD, Amelia LM Tan BSc, PhD, Byorn W.L. Tan MBBS, Bryce W.Q. Tan MBBS, Valentina Tibollo MS, Patric Tippman MSc, Guillaume Verdy MSc, William Yuan PhD, Paul Avillach MD, PhD, Nils Gehlenborg PhD, Gilbert S Omenn MD, PhD, The Consortium for Clinical Characterization of COVID-19 by EHR (4CE), Shyam Visweswaran MD**,** PhD$^{**}$, Tianxi Cai ScD$^{**}$, Yuan Luo PhD$^{**}$, Zongqi Xia MD, PhD$^{**}$
 
-[A Consortium for Clinical Characterization of COVID-19 by EHR study](https://covidclinical.net/)
+[A Consortium for Clinical Characterization of COVID-19 by EHR study (4CE)](https://covidclinical.net/)
 
 ------------------------------------------------------------------------
 
