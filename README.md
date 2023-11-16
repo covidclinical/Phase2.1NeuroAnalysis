@@ -32,7 +32,7 @@ Specifically, we used ICD codes to stratify patients into three groups of patien
 
 3.  `03_comorbidity-preprocess.Rmd` - this pre-processes the comorbidity data by healthcare system.
 
-    *Of note, this script reads in healthcare system data stored in the `results_comorbidity/`. After having sites run the initital package, I realized I forgot to include one of the comorbidity tables in the output. For this reason, sites reran just the comorbidity analysis and generated the `[site]_comorb_results.rda` file. In some cases, sites reran the full code (thus, generating the typical `[site]_results.rda` file) and I subsequently manually changed the name of the .rda file to be consistent and allow this script to remain streamlined.*
+    *Of note, this script reads in healthcare system data stored in the `results_comorbidity/`. After most sites ran the initital package, we added an additional comorbidity table to the output file. For this reason, sites reran just the comorbidity analysis and generated the `[site]_comorb_results.rda` file.*
 
 ## **Meta-Analysis**
 
@@ -41,6 +41,8 @@ Specifically, we used ICD codes to stratify patients into three groups of patien
 2. `Meta-Analysis-Cox-PH.Rmd` - performs the random-effects meta-analysis on the Cox-PH models at each site and plots forest plots to visualize the local and global risk estimates.
 
 3. `Meta-Analysis-KM-Survival-Curves.Rmd` - performs the random-effects meta-analysis on the covariate adjusted Kaplan-Meier survival curves.
+
+4. `Meta-Analysis: Cox-PH Sensitivity Analysis` - performs additional sensitivity analysies to evaluate the performance of Cox proportional hazard models constructed using three censor cutoff periods (30, 60, and 90 days) and three methods of adjusting for pre-admission health conditions. The analysis also contains a meta-analysis to evaluate the estimates of the individual covariates (e.g., age, comoridities, etc) on each outcome.
 
 ## 
 
