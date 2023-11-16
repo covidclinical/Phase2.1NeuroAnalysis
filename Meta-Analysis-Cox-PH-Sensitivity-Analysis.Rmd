@@ -1,0 +1,736 @@
+---
+title: "Meta-Analysis: Cox-PH Sensitivity Analysis"
+author: "Meg Hutch"
+date: "2022-12-06"
+output: html_document
+---
+
+This notebook evaluates the performance of Cox proportional hazard models constructed using three censor cutoff periods (30, 60, and 90 days) and three methods of adjusting for pre-admission health conditions (i.e., pre-existing comorbidity burden): (1) the inclusion of the 29 individual covariates (i.e., health conditions) comprising the Elixhauser Comorbidity Index, (2) the Elixhauser summary score, and (3) the top 10 principal components computed from logistic principal component analysis (LPCA).
+
+We also perform additional meta-analyses in order to evaluate the estimates of the indiviudal covariates (e.g., age, comoridities, etc) on each outcome.
+
+Of note, this analysis is performed only on adult patients due to the pediatric cohort's low incidence of both poor health outcomes and neurological diagnoses during COVID-19 hospitalization.
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(metafor)
+library(meta)
+library(cowplot)
+library(DT)
+library(ggbreak) 
+library(RColorBrewer)
+library(viridis)
+devtools::install_github("rdboyes/forester")
+devtools::install_github("thomasp85/patchwork")
+source("R/forester_custom.R")
+source("R/analyze_survival.R")
+```
+
+# Import Data from each Healthcare system
+
+```{r}
+# read in files from results folder 
+# this folder contains all of the local healthcare system level analyses
+rdas <- list.files(
+  path = "results",
+  pattern = ".rda",
+  full.names = TRUE
+)
+for (rda in rdas) {
+  load(rda)
+}
+
+rm(rdas, rda)
+
+# create a list of participating healthcare systems from our study tracking spreadsheet
+site_google_url <- "https://docs.google.com/spreadsheets/d/1epcYNd_0jCUMktOHf8mz5v651zy1JALD6PgzobrGWDY/edit?usp=sharing"
+
+# load site parameters
+site_params <- googlesheets4::read_sheet(site_google_url, sheet = 1)
+site_avails <- googlesheets4::read_sheet(site_google_url, sheet = 2)
+
+# filter the list of sites who ran the analysis
+sorted_sites <- site_avails %>%
+  filter(!is.na(date_v4_received)) %>%
+  pull(siteid) %>%
+  paste("results", sep = "_")
+
+# list sites without race
+sites_wo_race <- site_params %>%
+  filter(!include_race) %>%
+  pull(siteid)
+
+# combine all rda files with 'results' in name
+results <- mget(ls(pattern = "results"))
+
+## read in pt counts
+pt_counts_df <- read.csv('tables/site_pt_counts.csv')
+```
+
+## Identify sites to include in the analysis
+
+We will only include a site if they have \>= 3 neuro patients
+
+```{r}
+sites_adult <- pt_counts_df %>% 
+  filter(population == "Adult") %>% 
+  mutate(neuro_sum = n_var_Central + n_var_Peripheral) %>% 
+  filter(!neuro_sum < 3) %>% 
+  distinct(site) %>% 
+  mutate(site = gsub("_results", "", site))
+
+sites_adult_results <- sites_adult %>% mutate(site = paste0(site, "_results")) %>% as.vector()
+
+adult_results <- results[grepl(paste(sites_adult_results$site, collapse = "|"), names(results))]
+```
+
+## Define parameters
+
+```{r}
+outcomes <- c("time_first_discharge_reg_elix", "deceased_reg_elix")
+
+comorb_adj <- c("lpca", "score", "ind")
+
+censor_cut <- c("30", "60", "90")
+```
+
+## Get Cox model results - Adults
+
+```{r}
+cox_results_adults <- list()
+
+for (outcome_i in outcomes) {
+  for (comorb_adj_i in comorb_adj) {
+    for (censor_cut_i in censor_cut) {
+      
+      cox_results_adults[[outcome_i]][[comorb_adj_i]][[censor_cut_i]] <-
+        adult_results %>%
+        lapply(get_cox_row, population = "adults", comorb_method = comorb_adj_i, censor_cutoff = censor_cut_i, outcome = outcome_i) %>%
+        bind_rows() %>% 
+        mutate(outcome = outcome_i,
+               comorb_method = comorb_adj_i,
+               censor_cutoff = censor_cut_i)
+    }
+  }
+}
+```
+
+## Evaluate concordance
+
+```{r}
+cox_concordance_results_adults <- list()
+
+for (outcome_i in outcomes) {
+  for (comorb_adj_i in comorb_adj) {
+    for (censor_cut_i in censor_cut) {
+      
+      cox_concordance_results_adults[[outcome_i]][[comorb_adj_i]][[censor_cut_i]] <-
+        adult_results %>%
+        lapply(get_summary_stats, population = "adults", comorb_method = comorb_adj_i, censor_cutoff = censor_cut_i, outcome = outcome_i, cox_stat = "concordance") %>%
+        bind_rows() 
+    }
+  }
+}
+```
+
+**Bind all concordance results together**
+
+```{r}
+bind_results <-  function(results_list) {
+  
+  lpca_discharge <- results_list[["time_first_discharge_reg_elix"]][["lpca"]] %>% bind_rows()
+
+  score_discharge <- results_list[["time_first_discharge_reg_elix"]][["score"]] %>% bind_rows()
+  
+  ind_discharge <- results_list[["time_first_discharge_reg_elix"]][["ind"]] %>% bind_rows()
+  
+  lpca_mortality <- results_list[["deceased_reg_elix"]][["lpca"]] %>% bind_rows()
+  
+  score_mortality <- results_list[["deceased_reg_elix"]][["score"]] %>% bind_rows()
+  
+  ind_mortality <- results_list[["deceased_reg_elix"]][["ind"]] %>% bind_rows()
+  
+  combined_results <- bind_rows(lpca_discharge, score_discharge, ind_discharge,
+                                   lpca_mortality, score_mortality, ind_mortality)
+  
+  return(combined_results)
+  
+  
+}
+
+cox_results <- bind_results(results_list = cox_results_adults)
+concordance_results <- bind_results(results_list = cox_concordance_results_adults)
+
+```
+
+**Concordance**
+
+```{r}
+c_plot <- ggplot(concordance_results %>% 
+         mutate(comorb_method = factor(comorb_method,
+                                       levels = c("ind", "score", "lpca")) %>% 
+                  fct_recode(
+                    `Individual\nCovariates` = "ind",
+                    `Summary\nScore` = "score",
+                    `LPCA` = "lpca"
+                    ),
+                outcome = as.factor(outcome) %>% 
+                  fct_recode(
+                    Mortality = "deceased_reg_elix",
+                    Discharge = "time_first_discharge_reg_elix"),
+                censor_cutoff = as.factor(censor_cutoff) %>% 
+                  fct_recode(
+                    `30 Days` = "30",
+                    `60 Days` = "60", 
+                    `90 Days` = "90")), 
+       aes(x = comorb_method, y = C, group = comorb_method, fill = comorb_method)) + 
+  geom_violin(trim = FALSE) + 
+  facet_grid(outcome ~ censor_cutoff, scales = "free") + 
+  scale_y_continuous("Concordance", position="left") +   
+  xlab("") +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_fill_brewer(palette="Dark2") +
+  geom_boxplot(width=0.3, fill="white", outlier.shape=NA) +
+  geom_jitter(size = 0.4, alpha = 0.5, color = "black") +
+  theme(strip.text.x = element_text(size = 15, face = "bold"),
+        strip.text.y = element_text(size = 15, face = "bold"),
+        axis.title.y = element_text(size = 15, face = "bold"),
+        axis.text.x = element_text(size = 13, face = "bold", color = "black"),
+        axis.text.y = element_text(size = 12, face = "bold"))
+
+ggsave("figures/Comorbidity_adjustment.png", c_plot, width = 12, height = 7, dpi = 300)
+```
+
+```{r}
+c_results <- concordance_results %>% 
+  group_by(outcome, censor_cutoff, comorb_method) %>% 
+  summarize(min = min(C),
+            q1 = quantile(C, 0.25),
+            median = median(C),
+            mean = mean(C),
+            q3 = quantile(C, 0.75),
+            max = max(C)) %>% 
+    select(outcome, censor_cutoff, comorb_method, median, mean)
+write.csv(c_results, "tables/comorbidity_adj_c_results.csv", row.names=FALSE)
+
+
+# summary stats
+datatable(concordance_results %>% 
+  group_by(outcome, censor_cutoff, comorb_method) %>% 
+  summarize(min = min(C),
+            q1 = quantile(C, 0.25),
+            median = median(C),
+            mean = mean(C),
+            q3 = quantile(C, 0.75),
+            max = max(C)),
+  filter="top") 
+```
+
+## Evaluate comorb_method with highest OR for CNS and PNS
+
+```{r}
+# summary stats
+datatable(cox_results %>% 
+            filter(variable == "neuro_postCentral" | variable == "neuro_postPeripheral") %>% 
+            group_by(outcome, variable, censor_cutoff, comorb_method) %>% 
+            mutate(exp.coef. = round(exp.coef.)) %>% 
+            summarize(min = min(exp.coef., na.rm = TRUE),
+                      q1 = quantile(exp.coef., 0.25, na.rm = TRUE),
+                      median = median(exp.coef., na.rm = TRUE),
+                      mean = mean(exp.coef. , na.rm = TRUE),
+                      q3 = quantile(exp.coef., 0.75, na.rm = TRUE),
+                      max = max(exp.coef., na.rm = TRUE)),
+          filter="top")
+```
+
+## Random effects meta-analysis - CNS
+
+set `sm = "HR"` when estimate is logHR (which is coef in our model): <https://cran.r-project.org/web/packages/meta/meta.pdf> - (search logHR in cran to see example)
+
+\*Note: We excluded sites with \< 3 neuro patients in a category
+
+```{r}
+## adults 
+meta_results_adults_cns <- list()
+
+for (outcome_i in outcomes) {
+  for (comorb_adj_i in comorb_adj) {
+    for (censor_cut_i in censor_cut) {
+      
+      meta_results_adults_cns[[outcome_i]][[comorb_adj_i]][[censor_cut_i]] <-
+        cox_results %>% 
+        filter(outcome == outcome_i,
+               comorb_method == comorb_adj_i,
+               censor_cutoff == censor_cut_i
+               ) %>% 
+        bind_rows() %>%
+        data.frame() %>%
+        filter(variable == "neuro_postCentral") %>%
+        metagen(
+          TE = coef,
+          seTE = se.coef.,
+          data = .,
+          sm = "HR", # hazard ratios
+          comb.random = TRUE,
+          comb.fixed = FALSE,
+          method.tau = "DL", # default tau method
+          hakn = FALSE,
+          prediction = TRUE,
+          studlab = site
+        ) 
+    }
+  }
+}
+```
+
+## Random effects meta-analysis - PNS
+
+```{r}
+## adults
+meta_results_adults_pns <- list()
+
+for (outcome_i in outcomes) {
+  for (comorb_adj_i in comorb_adj) {
+    for (censor_cut_i in censor_cut) {
+      
+      meta_results_adults_pns[[outcome_i]][[comorb_adj_i]][[censor_cut_i]] <-
+        cox_results %>% 
+        filter(outcome == outcome_i,
+               comorb_method == comorb_adj_i,
+               censor_cutoff == censor_cut_i
+               ) %>% 
+        bind_rows() %>%
+        data.frame() %>%
+        filter(variable == "neuro_postPeripheral") %>%
+        metagen(
+          TE = coef,
+          seTE = se.coef.,
+          data = .,
+          sm = "HR", # hazard ratios
+          comb.random = TRUE,
+          comb.fixed = FALSE,
+          method.tau = "DL", # default tau method
+          hakn = FALSE,
+          prediction = TRUE,
+          studlab = site
+        ) 
+    }
+  }
+}
+```
+
+## Format meta results
+
+```{r}
+format_meta <- function(meta_results) {
+
+  ma_combine <- list()
+
+  for (outcome_i in outcomes) {
+    for (comorb_adj_i in comorb_adj) {
+      for (censor_cut_i in censor_cut) {
+        ma_combine[[outcome_i]][[comorb_adj_i]][[censor_cut_i]] <- data.frame(
+        TE = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["TE"]],
+        #seTE =meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["seTE"]],
+        studlab = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["studlab"]],
+        upper = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["upper"]],
+        lower = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["lower"]],
+        TE.random = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["TE.random"]],
+        lower.random = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["lower.random"]],
+        upper.random = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["upper.random"]],
+        pval.random = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["pval.random"]],
+        Weight.random = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["w.random"]],
+        lower.predict = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["lower.predict"]],
+        upper.predict = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["upper.predict"]],
+        I2 = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["I2"]],
+        lower.I2 = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["lower.I2"]],
+        upper.I2 = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["upper.I2"]],
+        H = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["H"]],
+        lower.H = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["lower.H"]],
+        upper.H = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["upper.H"]],
+        tau2 = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["tau2"]],
+        lower.tau2 = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["lower.tau2"]],
+        upper.tau2 = meta_results[[outcome_i]][[comorb_adj_i]][[censor_cut_i]][["upper.tau2"]],
+        analysis = paste0(outcome_i,"_", comorb_adj_i, "_", censor_cut_i)
+        ) %>% 
+          mutate(outcome = outcome_i,
+                 comorb_method = comorb_adj_i,
+                 censor_cutoff = censor_cut_i) %>% 
+          select(studlab, outcome, comorb_method, censor_cutoff, everything())
+    }
+  }
+    }
+
+  return(ma_combine)
+  }
+
+```
+
+```{r}
+meta_results_adults_cns_list = format_meta(meta_results_adults_cns)
+meta_results_adults_pns_list = format_meta(meta_results_adults_pns)
+```
+
+```{r}
+meta_results_cns <- bind_results(results_list = meta_results_adults_cns_list)
+meta_results_pns <- bind_results(results_list = meta_results_adults_cns_list)
+```
+
+```{r}
+meta_results_cns_table <- meta_results_cns %>% 
+  distinct(TE.random, outcome, comorb_method, censor_cutoff) %>% 
+  group_by(outcome, censor_cutoff, comorb_method) %>% 
+  mutate(TE.random = as.numeric(TE.random))
+
+write.csv(meta_results_cns_table, "tables/comorbidity_adj_cns_metanalysis_TE.csv", row.names=FALSE)
+
+
+# summary stats
+datatable(meta_results_cns %>% 
+            distinct(TE.random, outcome, comorb_method, censor_cutoff) %>% 
+            group_by(outcome, censor_cutoff, comorb_method) %>% 
+            mutate(TE.random = as.numeric(TE.random)),
+          filter="top")
+```
+
+```{r}
+meta_results_pns_table <- meta_results_pns %>% 
+  distinct(TE.random, outcome, comorb_method, censor_cutoff) %>% 
+  group_by(outcome, censor_cutoff, comorb_method) %>% 
+  mutate(TE.random = as.numeric(TE.random))
+
+write.csv(meta_results_pns_table, "tables/comorbidity_adj_pns_metanalysis_TE.csv", row.names=FALSE)
+
+
+# summary stats
+datatable(meta_results_pns %>% 
+            distinct(TE.random, outcome, comorb_method, censor_cutoff) %>% 
+            group_by(outcome, censor_cutoff, comorb_method) %>% 
+            mutate(TE.random = as.numeric(TE.random)),
+          filter="top")
+```
+
+**Hazard-Ratio**
+
+```{r}
+pd <- position_dodge(width = 0.6)
+
+meta_results_cns$neuro <- "CNS"
+meta_results_pns$neuro <- "PNS"
+
+meta_mortality_results <- rbind(meta_results_cns, meta_results_pns)
+
+meta_comorb_comparison <- ggplot(meta_mortality_results %>%
+                                  mutate(comorb_method = factor(comorb_method,
+                                                                levels = c("lpca", "score", "ind")) %>% 
+                                          fct_recode(
+                                            `LPCA` = "lpca",
+                                            `Summary\nScore` = "score",
+                                            `Individual\nCovariates` = "ind"
+                                             ),
+                                         outcome = as.factor(outcome) %>% 
+                                          fct_recode(
+                                            Mortality = "deceased_reg_elix",
+                                            Discharge = "time_first_discharge_reg_elix"),
+                                        censor_cutoff = as.factor(censor_cutoff) %>% 
+                                          fct_recode(
+                                            `30 Days` = "30",
+                                            `60 Days` = "60", 
+                                            `90 Days` = "90"), 
+                                        TE.random = exp(TE.random),
+                                        lower.random = exp(lower.random),
+                                        upper.random = exp(upper.random)) %>%  
+                                   rename(`Days since admission` = "censor_cutoff") %>% 
+                                   distinct(TE.random, lower.random, upper.random, outcome, comorb_method, `Days since admission`, neuro),
+                                 aes(x=TE.random, y=comorb_method, colour=`Days since admission`, group=`Days since admission`)) +
+  scale_color_viridis(discrete=TRUE, direction = 1) +
+  geom_point(aes(x=TE.random), shape=15, size=3, position = pd) +
+  geom_linerange(aes(xmin=lower.random, xmax=upper.random), position = pd) +
+  labs(x = "Hazard Ratio", y = "") +  
+  geom_vline(xintercept = 1, linetype="dashed")  + 
+  facet_grid(outcome ~ neuro) + 
+  theme_bw() +
+  theme(strip.text.x = element_text(size = 15, face = "bold"),
+        strip.text.y = element_text(size = 15, face = "bold"),
+        axis.title.x = element_text(size = 15, face = "bold"),
+        axis.text.x = element_text(size = 13, face = "bold", color = "black"),
+        axis.text.y = element_text(size = 12, face = "bold"),
+       legend.title = element_text(size = 15, face = "bold"),
+       legend.text = element_text(size = 13, face = "bold"))
+
+ggsave("figures/Comorbidity_adjustment_HR.png", meta_comorb_comparison, width = 12, height = 7, dpi = 300)
+```
+
+## Evaluate individual covariates
+
+```{r}
+variables <- cox_results %>% 
+  filter(comorb_method == "ind") %>% 
+  distinct(variable)
+
+variables <- unique(variables$variable)
+
+meta_results_all <- list()
+
+for(variable_i in variables) {
+  for (outcome_i in outcomes) {
+        
+    meta_results_all[[outcome_i]][[variable_i]] <-
+      cox_results %>% 
+      filter(outcome == outcome_i,
+             comorb_method == "ind",
+             censor_cutoff == "90",
+             variable == variable_i) %>% 
+      bind_rows() %>%
+      data.frame() %>%
+      metagen(
+        TE = coef,
+        seTE = se.coef.,
+        data = .,
+        sm = "HR", # hazard ratios
+        comb.random = TRUE,
+        comb.fixed = FALSE,
+        method.tau = "DL", # default tau method
+        hakn = FALSE,
+        prediction = TRUE,
+        studlab = site
+      ) 
+  }
+}
+
+```
+
+```{r}
+format_meta_ind <- function(meta_results) {
+
+ma_ind_combine <- list()
+
+for(variable_i in variables) {
+  for (outcome_i in outcomes) {
+    ma_ind_combine[[outcome_i]][[variable_i]] <- data.frame(
+      TE = meta_results[[outcome_i]][[variable_i]][["TE"]],
+      #seTE =meta_results[[outcome_i]][[variable_i]][["seTE"]],
+      studlab = meta_results[[outcome_i]][[variable_i]][["studlab"]],
+      upper = meta_results[[outcome_i]][[variable_i]][["upper"]],
+      lower = meta_results[[outcome_i]][[variable_i]][["lower"]],
+      TE.random = meta_results[[outcome_i]][[variable_i]][["TE.random"]],
+      lower.random = meta_results[[outcome_i]][[variable_i]][["lower.random"]],
+      upper.random = meta_results[[outcome_i]][[variable_i]][["upper.random"]],
+      pval.random = meta_results[[outcome_i]][[variable_i]][["pval.random"]],
+      Weight.random = meta_results[[outcome_i]][[variable_i]][["w.random"]],
+      lower.predict = meta_results[[outcome_i]][[variable_i]][["lower.predict"]],
+      upper.predict = meta_results[[outcome_i]][[variable_i]][["upper.predict"]],
+      I2 = meta_results[[outcome_i]][[variable_i]][["I2"]],
+      lower.I2 = meta_results[[outcome_i]][[variable_i]][["lower.I2"]],
+      upper.I2 = meta_results[[outcome_i]][[variable_i]][["upper.I2"]],
+      H = meta_results[[outcome_i]][[variable_i]][["H"]],
+      lower.H = meta_results[[outcome_i]][[variable_i]][["lower.H"]],
+      upper.H = meta_results[[outcome_i]][[variable_i]][["upper.H"]],
+      tau2 = meta_results[[outcome_i]][[variable_i]][["tau2"]],
+      lower.tau2 = meta_results[[outcome_i]][[variable_i]][["lower.tau2"]],
+      upper.tau2 = meta_results[[outcome_i]][[variable_i]][["upper.tau2"]]
+      ) %>% 
+        mutate(outcome = outcome_i,
+               variable = variable_i) %>% 
+        select(studlab, outcome, variable, everything())
+  }
+  }
+  return(ma_ind_combine)
+  }
+```
+
+```{r}
+meta_ind_results_all <- format_meta_ind(meta_results_all)
+```
+
+```{r}
+meta_ind_discharge <- bind_rows(meta_ind_results_all[['time_first_discharge_reg_elix']]) %>% 
+  distinct(variable, TE.random, lower.random, upper.random, pval.random) %>% 
+  mutate(TE.random = exp(TE.random),
+         lower.random = exp(lower.random),
+         upper.random = exp(upper.random)) %>% 
+  filter(!variable == 	"DMcx") %>% 
+  mutate(`Estimate` = round(TE.random, 2),
+         lower.random = round(lower.random, 2),
+         upper.random = round(upper.random, 2),
+    "Hazard Ratio" = paste(Estimate, "(", lower.random, ",", upper.random, ")"),
+    p.value_format = ifelse(pval.random > 0.01, round(pval.random, 2), round(pval.random, 3)),
+    "P-value" = ifelse(pval.random < 0.001, "< .001*", as.character(p.value_format)),
+    "P-value" = ifelse(pval.random >= 0.001 & round(pval.random,2) < 0.05, paste(`P-value`, "*"), `P-value`)
+  ) %>%
+  select(-p.value_format) %>% 
+  rename(Covariate = "variable")
+         
+
+meta_ind_deceased <- bind_rows(meta_ind_results_all[['deceased_reg_elix']]) %>% 
+  distinct(variable, TE.random, lower.random, upper.random, pval.random) %>% 
+  mutate(TE.random = exp(TE.random),
+         lower.random = exp(lower.random),
+         upper.random = exp(upper.random)) %>% 
+  filter(!variable == 	"DMcx") %>% 
+  mutate(Estimate = round(TE.random, 2),
+         lower.random = round(lower.random, 2),
+         upper.random = round(upper.random, 2),
+    "Hazard Ratio" = paste(Estimate, "(", lower.random, ",", upper.random, ")"),
+    p.value_format = ifelse(pval.random > 0.01, round(pval.random, 2), round(pval.random, 3)),
+    "P-value" = ifelse(pval.random < 0.001, "< .001*", as.character(p.value_format)),
+    "P-value" = ifelse(pval.random >= 0.001 & round(pval.random,2) < 0.05, paste(`P-value`, "*"), `P-value`)
+  ) %>%
+  select(-p.value_format) %>% 
+  rename(Covariate = "variable")
+```
+
+### Evaluating Outcomes by Age
+
+```{r}
+meta_ind_deceased_age <- meta_ind_deceased %>% 
+  filter(grepl(x = Covariate, pattern = "(age|neuro)")) %>% 
+  mutate(
+         Covariate = as.factor(Covariate),
+         Covariate = factor(Covariate,
+                            levels = rev(c("neuro_postPeripheral",
+                                       "neuro_postCentral",
+                                       "age_group26to49",
+                                       "age_group50to69",
+                                       "age_group70to79",
+                                       "age_group80plus")),
+                            labels = rev(c("PNS", "CNS", "26-49", "50-69", "70-79", "80+"))
+         ),
+         Outcome = "Mortality"
+  )
+
+meta_ind_discharge_age <- meta_ind_discharge %>% 
+  filter(grepl(x = Covariate, pattern = "(age|neuro)")) %>% 
+  mutate(
+         Covariate = as.factor(Covariate),
+         Covariate = factor(Covariate,
+                            levels = rev(c("neuro_postPeripheral",
+                                       "neuro_postCentral",
+                                       "age_group26to49",
+                                       "age_group50to69",
+                                       "age_group70to79",
+                                       "age_group80plus")),
+                            labels = rev(c("PNS", "CNS", "26-49", "50-69", "70-79", "80+"))
+         ),
+         Outcome = "Discharge"
+  )
+
+meta_ind_age <- rbind(meta_ind_deceased_age, meta_ind_discharge_age)
+
+
+color_palette <- c(PNS = "slateblue", CNS ="tomato", `26-49` = "#fde725",
+                   `50-69` = "#35b779", `70-79` = "#31688e", `80+` = "#440154")
+
+age_hr <- ggplot(meta_ind_age, aes(x=TE.random, y=Covariate, colour=Covariate, group = Outcome)) +
+  scale_color_manual("", values = color_palette) +
+  geom_point(aes(x=TE.random), shape=15, size=3, position = pd) +
+  geom_linerange(aes(xmin=lower.random, xmax=upper.random), position = pd) +
+  labs(x = "Hazard Ratio", y = "") + 
+  geom_vline(xintercept = 1, linetype="dashed")  + 
+  facet_grid(~Outcome, scales = "free_x") + 
+  theme_bw() +
+  theme(strip.text.x = element_text(size = 15, face = "bold"),
+        strip.text.y = element_text(size = 15, face = "bold"),
+        axis.title.x = element_text(size = 15, face = "bold"),
+        axis.text.x = element_text(size = 13, face = "bold", color = "black"),
+        axis.text.y = element_text(size = 12, face = "bold"),
+        legend.position = "none") 
+
+ggsave("figures/Hazard_ratio_age.png", age_hr, width = 12, height = 6, dpi = 300)
+```
+
+Create a scale function to identify the min and max CI for each site, excluding sites with values of 'Inf' or our invalid sites
+
+```{r}
+scale_plot <- function(combined_results_df) {
+  scale <- combined_results_df %>%
+    filter(
+      !lower.random == "Inf",
+      !upper.random == "Inf"
+    ) %>%
+    mutate(
+      min_est = min(lower.random, na.rm = TRUE) - 1,
+      max_est = max(upper.random, na.rm = TRUE) + 1,
+      min_est = if_else(min_est + 1 >= -1, min(lower.random, na.rm = TRUE)-0.1, min_est),
+      min_est = if_else(min_est > 1, 0.5, min_est),
+      max_est = if_else(max_est - 1 < 1, 1.1, max_est)) %>%
+    distinct(min_est, max_est)
+
+  return(scale)
+}
+```
+
+### **Mortality Results**
+
+```{r fig.width=8, height=20, message=FALSE, warning=FALSE}
+## define forest plot shapes
+# shape #16 is normal circle; #18 is diamond
+shapes <- rep(16, times = nrow(meta_ind_deceased))
+#shapes[length(shapes)] <- 18
+sizes <- rep(3.25, times = nrow(meta_ind_deceased))
+#sizes[length(sizes)] <- 5
+scale <- scale_plot(meta_ind_deceased)
+
+forester(
+  left_side_data = meta_ind_deceased %>% select(Covariate),
+  estimate = meta_ind_deceased$Estimate,
+  ci_low = meta_ind_deceased$lower.random,
+  ci_high = meta_ind_deceased$upper.random,
+  right_side_data = meta_ind_deceased[, c("Hazard Ratio", "P-value")],
+  display = TRUE,
+  font_family = "arial",
+  arrows = TRUE,
+  arrow_labels = c("Decreased Risk", "Increased Risk"),
+  null_line_at = 1,
+  xlim = c(scale$min_est,25),
+  #xlim = c(-0.5, scale$max_est),
+  #xbreaks = c(-1, 1, 3),
+  #nudge_x = .5,
+  point_sizes = sizes,
+  point_shapes = shapes, 
+  x_scale_linear = FALSE,
+  scale_break = FALSE,
+  scale_to_break = c(2.5,4),
+  add_plot_width = 5,
+  ggplot_width = 100,
+  set_png_height = 12.5,
+  file_path = here::here(paste0("figures/meta-analysis-coefficients-ind-90-mortality.png")))
+```
+
+### **Discharge Results**
+
+```{r fig.width=8, height=20, message=FALSE, warning=FALSE}
+## define forest plot shapes
+# shape #16 is normal circle; #18 is diamond
+shapes <- rep(16, times = nrow(meta_ind_discharge))
+#shapes[length(shapes)] <- 18
+sizes <- rep(3.25, times = nrow(meta_ind_discharge))
+#sizes[length(sizes)] <- 5
+scale <- scale_plot(meta_ind_discharge)
+
+forester(
+  left_side_data = meta_ind_discharge %>% select(Covariate),
+  estimate = meta_ind_discharge$Estimate,
+  ci_low = meta_ind_discharge$lower.random,
+  ci_high = meta_ind_discharge$upper.random,
+  right_side_data = meta_ind_discharge[, c("Hazard Ratio", "P-value")],
+  display = TRUE,
+  font_family = "arial",
+  arrows = TRUE,
+  arrow_labels = c("Decreased Risk", "Increased Risk"),
+  null_line_at = 1,
+  xlim = c(scale$min_est, 3.5),
+  #xlim = c(-0.5, scale$max_est),
+  #xbreaks = c(-1, 1, 3),
+  #nudge_x = .5,
+  point_sizes = sizes,
+  point_shapes = shapes, 
+  x_scale_linear = FALSE,
+  #scale_break = FALSE,
+  #scale_to_break = c(2.5,4),
+  add_plot_width = 5,
+  ggplot_width = 100,
+  set_png_height = 12.5,
+  file_path = here::here(paste0("figures/meta-analysis-coefficients-ind-90-discharge.png")))
+```
