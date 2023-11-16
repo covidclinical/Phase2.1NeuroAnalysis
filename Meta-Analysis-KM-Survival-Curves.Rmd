@@ -335,7 +335,7 @@ discharge_plot <- meta_surv_ci_df %>%
   scale_fill_manual(values = group.colors) +
   coord_cartesian(clip = "off", ylim = c(0, 1), expand = FALSE) +
   xlab("Time (days)") +
-  ylab("Event Probability") +
+  ylab("Hospitalization Probability") +
   scale_x_continuous(limits = c(0, 90), breaks = breaks_list$Discharge) + #breaks = breaks_fun) +
   theme_classic() +
   labs(color = "Neurological Status",
@@ -382,7 +382,7 @@ mortality_plot <- meta_surv_ci_df %>%
   scale_fill_manual(values = group.colors) +
   coord_cartesian(clip = "off", ylim = c(0, 1), expand = FALSE) +
   xlab("Time (days)") +
-  ylab("Event Probability") +
+  ylab("Survival Probability") +
   scale_x_continuous(limits = c(0, 90), breaks = breaks_list$Mortality) + #breaks = breaks_fun) +
   theme_classic() +
   labs(color = "Neurological Status",
